@@ -5,8 +5,8 @@ import { useAuth } from "../auth/AuthContext";
 export default function SignInPage() {
   const { login } = useAuth();
 
-  const [email, setEmail] = useState("rpphyrom.dev@gmail.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
