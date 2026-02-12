@@ -1,0 +1,18 @@
+export const TEXTNORM_TYPES = [
+  "CARDINAL",
+  "ORDINAL",
+  "DECIMAL",
+  "FRACTION",
+  "RANGE",
+  "DATE",
+  "TIME",
+  "DURATION",
+  "YEAR",
+  "MONEY",
+  "PERCENT",
+  "MEASURE",
+  "TELEPHONE",
+  "EMAIL",
+  "ID",
+  "ABBREVIATION",
+];

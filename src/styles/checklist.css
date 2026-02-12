@@ -1,0 +1,45 @@
+.typeChecklist {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
+
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.typeItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+
+  user-select: none;
+}
+
+.typeItem:hover {
+  background: rgba(17, 24, 39, 0.03);
+  border-color: rgba(229, 231, 235, 0.7);
+}
+
+.typeItem input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.typeItem span {
+  font-size: 13px;
+  color: var(--text);
+}
+
+@media (max-width: 620px) {
+  .typeChecklist {
+    grid-template-columns: 1fr;
+  }
+}

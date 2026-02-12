@@ -1,0 +1,47 @@
+.tableWrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table thead th {
+  text-align: left;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding: 10px;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table tbody td {
+  border-bottom: 1px solid #f3f4f6;
+  padding: 10px;
+  vertical-align: top;
+}
+
+.table tbody tr:hover {
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.cellPre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 600px) {
+  .actions {
+    gap: 6px;
+  }
+}

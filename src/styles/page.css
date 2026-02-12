@@ -1,0 +1,184 @@
+.pageHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pageHeader h2 {
+  margin: 0;
+  flex: 1;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 240px 1fr 140px;
+  gap: 10px;
+  padding: 12px;
+}
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  gap: 12px;
+}
+
+.pagerRight {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.smallMuted {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+@media (max-width: 780px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .toolbar .btn {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .pager {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagerRight {
+    justify-content: space-between;
+  }
+}
+
+.controlBarMinimal {
+  padding: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.miniControl {
+  display: grid;
+  gap: 6px;
+}
+
+.miniLabel {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.miniSelect,
+.miniInput {
+  border-radius: 999px;
+  /* minimalist pill-like controls */
+  padding: 10px 14px;
+}
+
+.miniSearch {
+  flex: 1;
+  min-width: 220px;
+}
+
+.miniInput {
+  max-width: 420px;
+  /* compact, user-friendly */
+}
+
+/* Mobile: full width controls */
+@media (max-width: 560px) {
+  .miniSearch {
+    min-width: 100%;
+  }
+
+  .miniInput {
+    max-width: none;
+    width: 100%;
+  }
+
+  .miniSelect {
+    width: 100%;
+  }
+}
+
+.controlBarMinimal {
+  padding: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  justify-content: flex-end;
+  /* controls remain on the right */
+}
+
+.totalInline {
+  margin-right: auto;
+  /* ✅ pushes other controls to the right */
+  display: grid;
+  gap: 4px;
+}
+
+.totalValue {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text);
+}
+
+/* existing minimalist controls */
+.miniControl {
+  display: grid;
+  gap: 6px;
+}
+
+.miniLabel {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.miniSelect,
+.miniInput {
+  border-radius: 999px;
+  padding: 10px 14px;
+}
+
+.miniSearch {
+  flex: 0 0 auto;
+  min-width: 260px;
+}
+
+.miniInput {
+  width: 320px;
+}
+
+@media (max-width: 560px) {
+  .controlBarMinimal {
+    justify-content: stretch;
+  }
+
+  .miniSearch {
+    min-width: 100%;
+  }
+
+  .miniInput {
+    width: 100%;
+  }
+
+  .miniSelect {
+    width: 100%;
+  }
+}

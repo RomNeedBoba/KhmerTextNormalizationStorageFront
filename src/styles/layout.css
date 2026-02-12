@@ -1,0 +1,69 @@
+.appShell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 260px;
+  background: #f9fafb;
+  border-right: 1px solid var(--border);
+  padding: 14px;
+}
+
+.brand {
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  margin: 6px 8px 14px;
+}
+
+.nav {
+  display: grid;
+  gap: 8px;
+}
+
+.navItem {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.navItem:hover {
+  background: rgba(17, 24, 39, 0.04);
+}
+
+.navItemActive {
+  background: #111827;
+  color: #fff;
+}
+
+.main {
+  flex: 1;
+  min-width: 0; /* important for responsive tables */
+  padding: 18px;
+}
+
+@media (max-width: 860px) {
+  .sidebar {
+    width: 210px;
+  }
+}
+
+@media (max-width: 720px) {
+  .appShell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .main {
+    padding: 14px;
+  }
+}
