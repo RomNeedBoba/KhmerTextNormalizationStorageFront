@@ -1,69 +1,112 @@
+/* ============================================================
+   layout.css — shell only, no theme overrides
+   ============================================================ */
+
 .appShell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;        /* full viewport height */
+  overflow: hidden;     /* prevent the shell itself from scrolling */
 }
 
 .sidebar {
-  width: 260px;
+  width: 220px;
   background: #f9fafb;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid #e5e7eb;
   padding: 14px;
-}
-
-.brand {
-  font-weight: 800;
-  letter-spacing: 0.2px;
-  margin: 6px 8px 14px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;        /* fixed to viewport */
+  overflow: hidden;     /* sidebar never scrolls */
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
 }
 
 .nav {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  overflow: hidden;     /* nav items never push sidebar taller */
 }
 
 .navItem {
   width: 100%;
   text-align: left;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid transparent;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: none;
   background: transparent;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.navItem:hover {
-  background: rgba(17, 24, 39, 0.04);
-}
+.navItem:hover    { background: rgba(17, 24, 39, 0.05); }
 
 .navItemActive {
   background: #111827;
   color: #fff;
 }
 
+/* ── main content — this is the only thing that scrolls ── */
 .main {
   flex: 1;
-  min-width: 0; /* important for responsive tables */
-  padding: 18px;
+  min-width: 0;
+  padding: 24px 28px;
+  overflow-y: auto;     /* only .main scrolls */
+  height: 100vh;
 }
 
+/* ── sidebar footer — pinned to bottom ── */
+.sidebarFooter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  flex-shrink: 0;       /* never gets squished */
+}
+
+.sidebarEmail {
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebarLogout {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 7px;
+  border: 1px solid #fca5a5;
+  background: #fff5f5;
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.12s;
+}
+
+.sidebarLogout:hover { background: #fee2e2; }
+
 @media (max-width: 860px) {
-  .sidebar {
-    width: 210px;
-  }
+  .sidebar { width: 180px; }
 }
 
 @media (max-width: 720px) {
-  .appShell {
-    flex-direction: column;
-  }
-
-  .sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .main {
-    padding: 14px;
-  }
+  .appShell   { flex-direction: column; height: auto; overflow: auto; }
+  .sidebar    { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #e5e7eb; }
+  .main       { height: auto; }
 }

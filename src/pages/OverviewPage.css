@@ -1,0 +1,347 @@
+/* ============================================================
+   OverviewPage.css — scoped to .ov, light theme only
+   ============================================================ */
+
+.ov {
+  display: grid;
+  gap: 16px;
+  font-family: inherit;
+  color: #111827;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PAGE HEADER
+───────────────────────────────────────────────────────────── */
+
+.ov-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ov-title { font-size: 20px; font-weight: 700; color: #111827; margin: 0 0 3px; }
+.ov-sub   { font-size: 12px; color: #6b7280;  margin: 0; }
+
+/* ─────────────────────────────────────────────────────────────
+   BUTTON
+───────────────────────────────────────────────────────────── */
+
+.ov-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.ov-btn:hover { background: #f9fafb; }
+
+/* ─────────────────────────────────────────────────────────────
+   STAT CARDS — 6 columns, all consistent
+───────────────────────────────────────────────────────────── */
+
+.ov-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+.ov-stat {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.ov-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #9ca3af;
+  margin-bottom: 6px;
+}
+
+.ov-stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.ov-stat-sub {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CARD
+───────────────────────────────────────────────────────────── */
+
+.ov-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.ov-card-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ov-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 2px;
+}
+
+.ov-card-sub {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.ov-card-body { padding: 16px 18px; }
+
+/* ─────────────────────────────────────────────────────────────
+   HOURS BAR CHART
+───────────────────────────────────────────────────────────── */
+
+.ov-bar-row {
+  display: grid;
+  grid-template-columns: 32px 200px 1fr 72px;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0;
+}
+
+.ov-bar-rank {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-bar-name-col { min-width: 0; }
+
+.ov-bar-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-bar-email {
+  font-size: 10px;
+  color: #9ca3af;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-bar-track {
+  height: 6px;
+  background: #f3f4f6;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.ov-bar-fill {
+  height: 100%;
+  background: #374151;
+  border-radius: 3px;
+  transition: width 0.6s cubic-bezier(.4,0,.2,1);
+}
+
+.ov-bar-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   STUDENTS TABLE
+───────────────────────────────────────────────────────────── */
+
+.ov-table-wrap { overflow-x: auto; }
+
+.ov-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #111827;
+}
+
+.ov-table th {
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.ov-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+  color: #111827;
+}
+
+.ov-table tbody tr:last-child td { border-bottom: none; }
+.ov-table tbody tr:hover td      { background: #f9fafb; }
+
+/* cell variants */
+.ov-td-rank     { font-size: 11px; color: #9ca3af; font-weight: 700; text-align: center; width: 36px; }
+.ov-td-email    { font-size: 12px; color: #374151; font-family: monospace; }
+.ov-td-name     { font-size: 13px; font-weight: 500; color: #111827; }
+.ov-td-num      { font-size: 14px; font-weight: 700; color: #111827; font-variant-numeric: tabular-nums; }
+.ov-td-hours    { font-size: 13px; font-weight: 600; color: #374151; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-td-rejected { font-size: 13px; color: #6b7280; font-variant-numeric: tabular-nums; }
+.ov-td-pay      { font-size: 13px; font-weight: 700; color: #111827; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-td-pay-total{ font-size: 14px; font-weight: 800; }
+
+/* acceptance rate bar */
+.ov-rate-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ov-rate-track {
+  flex: 1;
+  height: 4px;
+  background: #f3f4f6;
+  border-radius: 2px;
+  min-width: 60px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.ov-rate-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s;
+}
+
+.ov-rate-pct {
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  min-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* table footer total row */
+.ov-tfoot-row td {
+  padding: 12px 14px;
+  background: #f9fafb;
+  border-top: 2px solid #e5e7eb;
+  font-weight: 700;
+  color: #111827;
+}
+
+.ov-tfoot-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   ALERTS / STATES
+───────────────────────────────────────────────────────────── */
+
+.ov-alert-error {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.ov-empty   { text-align: center; padding: 32px 20px; font-size: 13px; color: #9ca3af; }
+.ov-loading { text-align: center; padding: 48px 20px; font-size: 13px; color: #9ca3af; }
+
+/* ─────────────────────────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .ov-stats-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .ov-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .ov-bar-row    { grid-template-columns: 28px 1fr 80px; }
+  .ov-bar-name-col { display: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PAID TOGGLE BUTTON
+───────────────────────────────────────────────────────────── */
+
+.ov-paid-btn {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.12s;
+  border: 1px solid #d1d5db;
+  white-space: nowrap;
+}
+
+.ov-paid-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Paid — green pill */
+.ov-paid-btn-yes {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+.ov-paid-btn-yes:hover:not(:disabled) {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+/* Unpaid — gray pill */
+.ov-paid-btn-no {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+  color: #6b7280;
+}
+.ov-paid-btn-no:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #374151;
+}
+
+/* Paid row — subtle highlight */
+.ov-row-paid td {
+  background: #fafffe;
+}

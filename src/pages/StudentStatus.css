@@ -1,0 +1,340 @@
+/* ============================================================
+   StudentStatus.css
+   All rules scoped to .ss — does not affect other pages
+   ============================================================ */
+
+.ss {
+  display: grid;
+  gap: 16px;
+  font-family: inherit;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PAGE HEADER
+───────────────────────────────────────────────────────────── */
+
+.ss-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ss-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 2px;
+}
+
+.ss-sub {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   ALERTS
+───────────────────────────────────────────────────────────── */
+
+.ss-alert-error {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   STAT CARDS
+───────────────────────────────────────────────────────────── */
+
+.ss-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ss-stat {
+  flex: 1;
+  min-width: 90px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px 16px;
+  border-top: 3px solid #e5e7eb;
+}
+
+.ss-stat-value {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.ss-stat-label {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.ss-stat-total    { border-top-color: #d1d5db; }
+.ss-stat-assigned { border-top-color: #60a5fa; }
+.ss-stat-submitted{ border-top-color: #f59e0b; }
+.ss-stat-verified { border-top-color: #22c55e; }
+.ss-stat-rejected { border-top-color: #ef4444; }
+
+/* ─────────────────────────────────────────────────────────────
+   PROGRESS BAR
+───────────────────────────────────────────────────────────── */
+
+.ss-progress-wrap {
+  display: grid;
+  gap: 8px;
+}
+
+.ss-progress-bar {
+  height: 8px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+}
+
+.ss-progress-fill {
+  height: 100%;
+  transition: width 0.5s ease;
+}
+
+.ss-fill-verified  { background: #22c55e; }
+.ss-fill-submitted { background: #f59e0b; }
+.ss-fill-assigned  { background: #60a5fa; }
+.ss-fill-rejected  { background: #ef4444; }
+
+.ss-progress-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: #6b7280;
+  align-items: center;
+}
+
+.ss-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.ss-dot-verified  { background: #22c55e; }
+.ss-dot-submitted { background: #f59e0b; }
+.ss-dot-assigned  { background: #60a5fa; }
+.ss-dot-rejected  { background: #ef4444; }
+
+/* ─────────────────────────────────────────────────────────────
+   TABS
+───────────────────────────────────────────────────────────── */
+
+.ss-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ss-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  font-family: inherit;
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.ss-tab:hover     { color: #111827; }
+
+.ss-tab-active {
+  color: #111827;
+  border-bottom-color: #111827;
+  font-weight: 600;
+}
+
+.ss-tab-count {
+  background: #e5e7eb;
+  color: #374151;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   FILE LIST
+───────────────────────────────────────────────────────────── */
+
+.ss-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ss-item {
+  display: grid;
+  grid-template-columns: 200px 1fr 220px;
+  align-items: start;
+  gap: 16px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid #e5e7eb;
+  border-radius: 8px;
+  transition: background 0.1s;
+}
+
+.ss-item:hover { background: #f9fafb; }
+
+.ss-item-assigned  { border-left-color: #60a5fa; }
+.ss-item-submitted { border-left-color: #f59e0b; }
+.ss-item-verified  { border-left-color: #22c55e; }
+.ss-item-rejected  { border-left-color: #ef4444; }
+
+/* ── file info ── */
+.ss-item-info { display: flex; flex-direction: column; gap: 3px; }
+
+.ss-item-filename {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-item-folder {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* ── text preview ── */
+.ss-item-text {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.ss-item-corrected { color: #111827; font-weight: 500; }
+.ss-item-original  { color: #9ca3af; font-style: italic; }
+
+/* ── right column ── */
+.ss-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.ss-item-dates {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.ss-expire      { font-size: 11px; color: #6b7280; font-weight: 500; }
+.ss-expire-warn { font-size: 11px; color: #d97706; font-weight: 600; }
+
+.ss-admin-note {
+  font-size: 11px;
+  color: #ef4444;
+  font-style: italic;
+  text-align: right;
+  max-width: 200px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   STATUS BADGES
+───────────────────────────────────────────────────────────── */
+
+.ss-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.ss-badge-assigned  { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+.ss-badge-submitted { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+.ss-badge-verified  { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+.ss-badge-rejected  { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+/* ─────────────────────────────────────────────────────────────
+   BUTTON
+───────────────────────────────────────────────────────────── */
+
+.ss-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.ss-btn:hover { background: #f3f4f6; }
+
+/* ─────────────────────────────────────────────────────────────
+   EMPTY / LOADING
+───────────────────────────────────────────────────────────── */
+
+.ss-empty {
+  text-align: center;
+  padding: 48px 20px;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.ss-loading {
+  text-align: center;
+  padding: 48px 20px;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .ss-item {
+    grid-template-columns: 1fr;
+  }
+  .ss-item-right {
+    align-items: flex-start;
+  }
+}

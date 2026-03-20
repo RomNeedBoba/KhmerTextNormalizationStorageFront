@@ -28,7 +28,7 @@ export default function SignInPage() {
     <div className="signinShell">
       <form className="card signinCard" onSubmit={submit}>
         <h2 className="signinTitle">Sign In</h2>
-        <div className="smallMuted">Internal access for researchers</div>
+        <div className="smallMuted">Internal access for researchers only</div>
 
         {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
 

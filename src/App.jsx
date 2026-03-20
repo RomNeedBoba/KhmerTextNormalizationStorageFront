@@ -1,27 +1,34 @@
 import { useState } from "react";
+import { useAuth } from "./auth/AuthContext";
 import Sidebar from "./components/Sidebar";
-import TextNormPage from "./pages/TextNormPage";
-import ParallelNormPage from "./pages/ParallelNormPage"; // ✅ NEW
-
-function Overview() {
-  return (
-    <div className="card" style={{ padding: 14 }}>
-      <h2 style={{ marginTop: 0 }}>Overview</h2>
-      <div className="smallMuted">Dashboard Later</div>
-    </div>
-  );
-}
+import OverviewPage       from "./pages/OverviewPage";
+import TextNormPage       from "./pages/TextNormPage";
+import ParallelNormPage   from "./pages/ParallelNormPage";
+import DataValidationPage from "./pages/DataValidationPage";
+import StudentStatusPage  from "./pages/StudentStatusPage";
 
 export default function App() {
-  const [active, setActive] = useState("textnorm");
+  const { user } = useAuth();
+  const isAdmin  = user?.role === "admin";
+
+  const [active, setActive] = useState(isAdmin ? "overview" : "datavalidation");
 
   return (
     <div className="appShell">
       <Sidebar active={active} onSelect={setActive} />
       <main className="main">
-        {active === "overview" && <Overview />}
-        {active === "textnorm" && <TextNormPage />}
-        {active === "parallelnorm" && <ParallelNormPage />} {/* ✅ NEW */}
+
+        {/* ── Admin only ── */}
+        {isAdmin && active === "overview"     && <OverviewPage />}
+        {isAdmin && active === "textnorm"     && <TextNormPage />}
+        {isAdmin && active === "parallelnorm" && <ParallelNormPage />}
+
+        {/* ── Admin + Student ── */}
+        {active === "datavalidation" && <DataValidationPage />}
+
+        {/* ── Student only ── */}
+        {!isAdmin && active === "mystatus" && <StudentStatusPage />}
+
       </main>
     </div>
   );
