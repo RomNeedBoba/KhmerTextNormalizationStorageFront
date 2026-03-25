@@ -671,3 +671,44 @@
   white-space: pre-wrap;
   min-height: 56px;
 }
+
+/* Diff highlighting */
+.dv-diff-added {
+  background-color: #fecaca; /* Light red */
+  color: #991b1b; /* Dark red */
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 600;
+  position: relative;
+  cursor: help;
+}
+
+.dv-diff-added::before {
+  content: "+";
+  margin-right: 2px;
+  font-weight: bold;
+}
+
+.dv-diff-removed {
+  background-color: #d1d5db; /* Light gray */
+  color: #6b7280; /* Dark gray */
+  padding: 0 2px;
+  border-radius: 2px;
+  text-decoration: line-through;
+  opacity: 0.7;
+  position: relative;
+  cursor: help;
+}
+
+.dv-diff-removed::before {
+  content: "−";
+  margin-right: 2px;
+  font-weight: bold;
+}
+
+/* Hover effect */
+.dv-diff-added:hover,
+.dv-diff-removed:hover {
+  opacity: 1;
+  box-shadow: 0 0 4px rgba(0,0,0,0.2);
+}
