@@ -16,6 +16,82 @@ const fmtCountdown = (ms) => {
 
 const shortId = (id) => String(id).slice(-6).toUpperCase();
 
+/**
+ * Simple word-level diff
+ * Returns array of {type: 'added'|'removed'|'same', text: string}
+ */
+function diffWords(original, modified) {
+  const origWords = original.split(/(\s+)/);
+  const modWords = modified.split(/(\s+)/);
+
+  // Simple algorithm: if lengths differ significantly, mark modified text as added
+  if (Math.abs(origWords.length - modWords.length) > 5) {
+    return [
+      ...origWords.map(w => ({ type: 'removed', text: w })),
+      ...modWords.map(w => ({ type: 'added', text: w }))
+    ];
+  }
+
+  // Word-by-word comparison
+  const result = [];
+  const maxLen = Math.max(origWords.length, modWords.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const orig = origWords[i] || '';
+    const mod = modWords[i] || '';
+
+    if (orig === mod) {
+      result.push({ type: 'same', text: orig });
+    } else if (!orig) {
+      result.push({ type: 'added', text: mod });
+    } else if (!mod) {
+      result.push({ type: 'removed', text: orig });
+    } else {
+      result.push({ type: 'removed', text: orig });
+      result.push({ type: 'added', text: mod });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Render diff with colored spans
+ */
+function DiffHighlight({ original, modified }) {
+  if (!original || !modified) {
+    return <span>{modified || original}</span>;
+  }
+
+  if (original === modified) {
+    return <span>{original}</span>;
+  }
+
+  const diff = diffWords(original, modified);
+
+  return (
+    <span>
+      {diff.map((segment, idx) => {
+        if (segment.type === 'same') {
+          return <span key={idx}>{segment.text}</span>;
+        } else if (segment.type === 'added') {
+          return (
+            <span key={idx} className="dv-diff-added" title="Added by student">
+              {segment.text}
+            </span>
+          );
+        } else {
+          return (
+            <span key={idx} className="dv-diff-removed" title="Removed from original">
+              {segment.text}
+            </span>
+          );
+        }
+      })}
+    </span>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────
 // AUDIO PLAYER
 // ─────────────────────────────────────────────────────────────────
@@ -90,8 +166,7 @@ function AudioPlayer({ fileId }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ADMIN REVIEW CARD
-// Shows full text side by side for proper validation
+// ADMIN REVIEW CARD (WITH DIFF)
 // ─────────────────────────────────────────────────────────────────
 
 function AdminReviewCard({ file, onVerdict, isVerdicting }) {
@@ -118,7 +193,7 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
         <AudioPlayer fileId={file._id} />
       </div>
 
-      {/* text comparison */}
+      {/* text comparison with DIFF */}
       <div className="dv-review-cols">
 
         <div className="dv-review-col">
@@ -132,9 +207,13 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
             </div>
           </div>
           <div className="dv-review-col-section">
-            <div className="dv-review-col-sublabel">Student correction</div>
+            <div className="dv-review-col-sublabel">Student correction (diff highlighted)</div>
             <div className={`dv-review-text ${file.studentRawText ? "dv-review-text-student" : "dv-review-text-empty"}`}>
-              {file.studentRawText || <em className="dv-no-text">No correction</em>}
+              {file.studentRawText ? (
+                <DiffHighlight original={file.rawText || ""} modified={file.studentRawText} />
+              ) : (
+                <em className="dv-no-text">No correction</em>
+              )}
             </div>
           </div>
         </div>
@@ -150,9 +229,13 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
             </div>
           </div>
           <div className="dv-review-col-section">
-            <div className="dv-review-col-sublabel">Student correction</div>
+            <div className="dv-review-col-sublabel">Student correction (diff highlighted)</div>
             <div className={`dv-review-text ${file.studentNormalizedText ? "dv-review-text-student" : "dv-review-text-empty"}`}>
-              {file.studentNormalizedText || <em className="dv-no-text">No correction</em>}
+              {file.studentNormalizedText ? (
+                <DiffHighlight original={file.normalizedText || ""} modified={file.studentNormalizedText} />
+              ) : (
+                <em className="dv-no-text">No correction</em>
+              )}
             </div>
           </div>
         </div>
@@ -568,8 +651,12 @@ export default function DataValidationPage() {
                       <td className="dv-cell-file">{f.filename}</td>
                       <td className="dv-cell-path">{f.movieFolder}</td>
                       <td className="dv-cell-student">{f.studentName || "—"}</td>
-                      <td className="dv-cell-text-full">{f.studentRawText || f.rawText || "—"}</td>
-                      <td className="dv-cell-text-full">{f.studentNormalizedText || f.normalizedText || "—"}</td>
+                      <td className="dv-cell-text-full">
+                        <DiffHighlight original={f.rawText || ""} modified={f.studentRawText || ""} />
+                      </td>
+                      <td className="dv-cell-text-full">
+                        <DiffHighlight original={f.normalizedText || ""} modified={f.studentNormalizedText || ""} />
+                      </td>
                       <td><AudioPlayer fileId={f._id} /></td>
                     </tr>
                   ))}
@@ -678,11 +765,15 @@ export default function DataValidationPage() {
                     <div className="dv-submitted-texts">
                       <div className="dv-submitted-col">
                         <div className="dv-submitted-label">Raw Text</div>
-                        <div className="dv-submitted-text">{f.studentRawText || f.rawText || "—"}</div>
+                        <div className="dv-submitted-text">
+                          <DiffHighlight original={f.rawText || ""} modified={f.studentRawText || ""} />
+                        </div>
                       </div>
                       <div className="dv-submitted-col">
                         <div className="dv-submitted-label">Normalized Text</div>
-                        <div className="dv-submitted-text">{f.studentNormalizedText || f.normalizedText || "—"}</div>
+                        <div className="dv-submitted-text">
+                          <DiffHighlight original={f.normalizedText || ""} modified={f.studentNormalizedText || ""} />
+                        </div>
                       </div>
                     </div>
                   </div>
