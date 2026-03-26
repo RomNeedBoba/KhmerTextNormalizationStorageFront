@@ -18,7 +18,6 @@ const shortId = (id) => String(id).slice(-6).toUpperCase();
 
 /**
  * Simple word-level diff
- * Returns array of {type: 'added'|'removed'|'same', text: string}
  */
 function diffWords(original, modified) {
   const origWords = original.split(/(\s+)/);
@@ -91,10 +90,10 @@ function DiffHighlight({ original, modified }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// AUDIO PLAYER WITH LAZY LOADING & PREVIEW UPGRADE
+// AUDIO PLAYER - FAST (Direct 48kHz streaming)
 // ─────────────────────────────────────────────────────────────────
 
-function AudioPlayer({ fileId, usePreview = true }) {
+function AudioPlayer({ fileId }) {
   const audioRef = useRef(null);
   const [blobUrl, setBlobUrl] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -102,11 +101,7 @@ function AudioPlayer({ fileId, usePreview = true }) {
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isPreview, setIsPreview] = useState(usePreview);
-  const [previewReady, setPreviewReady] = useState(false);
-  const pollIntervalRef = useRef(null);
 
-  // ✅ Load preview on mount, then poll for full quality
   useEffect(() => {
     let objectUrl = null;
     setLoading(true);
@@ -114,28 +109,12 @@ function AudioPlayer({ fileId, usePreview = true }) {
 
     const loadAudio = async () => {
       try {
-        // Start with preview (fast)
-        const previewUrl = usePreview ? `/api/audio/${fileId}/stream-preview` : `/api/audio/${fileId}/stream`;
-        const res = await api.get(previewUrl, { responseType: "blob" });
+        const res = await api.get(`/api/audio/${fileId}/stream`, { 
+          responseType: "blob" 
+        });
         objectUrl = URL.createObjectURL(res.data);
         setBlobUrl(objectUrl);
-        setIsPreview(usePreview);
         setLoading(false);
-
-        // ✅ Poll for full-quality preview every 2 seconds
-        if (usePreview) {
-          pollIntervalRef.current = setInterval(async () => {
-            try {
-              const status = await api.get(`/api/audio/${fileId}/preview-status`);
-              if (status.data.previewReady) {
-                setPreviewReady(true);
-                clearInterval(pollIntervalRef.current);
-              }
-            } catch (e) {
-              // Silent fail
-            }
-          }, 2000);
-        }
       } catch (e) {
         setError("Audio unavailable");
         setLoading(false);
@@ -146,37 +125,8 @@ function AudioPlayer({ fileId, usePreview = true }) {
 
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [fileId, usePreview]);
-
-  // ✅ Upgrade to full quality when preview is ready
-  useEffect(() => {
-    if (!previewReady || !isPreview) return;
-
-    let objectUrl = null;
-    api.get(`/api/audio/${fileId}/stream`, { responseType: "blob" })
-      .then((res) => {
-        objectUrl = URL.createObjectURL(res.data);
-        const currentTime = audioRef.current?.currentTime || 0;
-
-        setBlobUrl(objectUrl);
-        setIsPreview(false);
-
-        // Resume playback at same timestamp
-        setTimeout(() => {
-          if (audioRef.current) {
-            audioRef.current.currentTime = currentTime;
-            if (playing) audioRef.current.play();
-          }
-        }, 100);
-      })
-      .catch(() => console.warn("[audio] Failed to upgrade to full quality"));
-
-    return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [previewReady, fileId, isPreview, playing]);
+  }, [fileId]);
 
   const toggle = () => {
     const a = audioRef.current;
@@ -232,11 +182,6 @@ function AudioPlayer({ fileId, usePreview = true }) {
 
       <span className="dv-time">
         {fmtTime(audioRef.current?.currentTime)} / {fmtTime(duration)}
-      </span>
-
-      {/* ✅ Show quality indicator */}
-      <span className="dv-quality" title={isPreview ? "Loading full quality..." : "Full quality"}>
-        {isPreview ? "🔶 Preview" : "🔵 HD"}
       </span>
     </div>
   );
@@ -518,6 +463,7 @@ export default function DataValidationPage() {
     }
   };
 
+  // ✅ Only load on mount
   useEffect(() => {
     if (isAdmin) {
       loadAdminFiles(1, "submitted");
@@ -527,7 +473,7 @@ export default function DataValidationPage() {
       loadAvailable("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAdmin]);
 
   const handleAvSearch = (val) => {
     setAvSearch(val);
@@ -542,7 +488,7 @@ export default function DataValidationPage() {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // STUDENT ACTIONS
+  // STUDENT ACTIONS - OPTIMISTIC UPDATES
   // ─────────────────────────────────────────────────────────────
 
   const toggleSelect = (id) => {
@@ -555,30 +501,80 @@ export default function DataValidationPage() {
 
   const handleAssign = async () => {
     if (!selected.length) return;
+
+    // ✅ Optimistic update - immediately mark as assigned
+    const selectedItems = available.filter((f) => selected.includes(f._id));
+    const updatedAvailable = available.filter((f) => !selected.includes(f._id));
+    const updatedMyFiles = [
+      ...myFiles,
+      ...selectedItems.map((f) => ({
+        ...f,
+        status: "assigned",
+        assignedAt: new Date(),
+        expiresIn: 24 * 60 * 60 * 1000,
+      })),
+    ];
+
+    // Store original state for rollback
+    const originalAvailable = available;
+    const originalMyFiles = myFiles;
+    const originalAvTotal = avTotal;
+
+    setAvailable(updatedAvailable);
+    setMyFiles(updatedMyFiles);
+    setAvTotal((prev) => Math.max(0, prev - selected.length));
+    setSelected([]);
     setAssigning(true);
     setError("");
+    setTab("inprogress");
+
     try {
       const res = await api.post("/api/audio/assign", { fileIds: selected });
       setSuccess(`Assigned ${res.data.assigned} file(s).`);
-      setSelected([]);
-      await loadMyFiles();
-      await loadAvailable(avSearch);
-      setTab("inprogress");
+
+      // ✅ Verify in background (non-blocking)
+      loadAvailable(avSearch).catch(() => {});
     } catch (e) {
+      // ❌ Restore on error
+      setAvailable(originalAvailable);
+      setMyFiles(originalMyFiles);
+      setAvTotal(originalAvTotal);
       setError(e?.response?.data?.message || e.message);
+      setTab("available");
     } finally {
       setAssigning(false);
     }
   };
 
   const handleSubmit = async (fileId, payload) => {
+    // ✅ Update UI immediately (optimistic)
+    const originalFiles = myFiles;
+    setMyFiles((prev) =>
+      prev.map((f) =>
+        f._id === fileId
+          ? {
+              ...f,
+              status: "submitted",
+              studentRawText: payload.studentRawText,
+              studentNormalizedText: payload.studentNormalizedText,
+              submittedAt: new Date(),
+            }
+          : f
+      )
+    );
     setSubmitting(fileId);
     setError("");
+
     try {
       await api.post(`/api/audio/${fileId}/submit`, payload);
       setSuccess("Submitted successfully.");
-      await loadMyFiles();
+
+      // ✅ Don't reload - optimistic update already applied
+      // Just verify the file in background
+      loadMyFiles().catch(() => {});
     } catch (e) {
+      // ❌ Restore on error
+      setMyFiles(originalFiles);
       setError(e?.response?.data?.message || e.message);
     } finally {
       setSubmitting(null);
@@ -586,18 +582,28 @@ export default function DataValidationPage() {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // ADMIN ACTIONS
+  // ADMIN ACTIONS - OPTIMISTIC UPDATES
   // ─────────────────────────────────────────────────────────────
 
   const handleVerdict = async (fileId, verdict, adminNote = "") => {
+    // ✅ Remove from UI immediately (optimistic)
+    const originalFiles = adminFiles;
+    setAdminFiles((prev) => prev.filter((f) => f._id !== fileId));
     setVerdicting(fileId);
     setError("");
+
     try {
       await api.patch(`/api/audio/${fileId}/verify`, { verdict, adminNote });
       setSuccess(`File ${verdict}.`);
+
+      // ✅ Only reload current page (don't reload everything)
       await loadAdminFiles(adminPage, adminStatus, adminSearch);
-      await loadStats();
+
+      // ✅ Update stats in background (non-blocking)
+      loadStats().catch(() => {});
     } catch (e) {
+      // ❌ Restore on error
+      setAdminFiles(originalFiles);
       setError(e?.response?.data?.message || e.message);
     } finally {
       setVerdicting(null);
@@ -637,9 +643,9 @@ export default function DataValidationPage() {
         </div>
       )}
 
-      {/* ═══════════════════════════���══════════════════════════
+      {/* ══════════════════════════════════════════════════════
           ADMIN VIEW
-      ══════════════════════════════════════════════════════ */}
+      ═══════════════════════════════════════════════���══════ */}
       {isAdmin && (
         <div>
           <div className="dv-page-header">
