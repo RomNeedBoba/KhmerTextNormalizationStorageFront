@@ -1,7 +1,58 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import "./DataValidation.css";
+
+// ─────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────
+
+const EXPIRE_MS = 24 * 60 * 60 * 1000;
+const MAX_PER_DAY = 10;
+const LIMIT = 20;
+const SEARCH_DEBOUNCE = 300;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// ─────────────────────────────────────────────────────────────────
+// CACHE LAYER
+// ─────────────────────────────────────────────────────────────────
+
+class CacheManager {
+  constructor() {
+    this.cache = new Map();
+  }
+
+  set(key, value) {
+    this.cache.set(key, {
+      data: value,
+      timestamp: Date.now(),
+    });
+  }
+
+  get(key) {
+    const item = this.cache.get(key);
+    if (!item) return null;
+    if (Date.now() - item.timestamp > CACHE_TTL) {
+      this.cache.delete(key);
+      return null;
+    }
+    return item.data;
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+
+  invalidate(pattern) {
+    for (const key of this.cache.keys()) {
+      if (key.includes(pattern)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+const cacheManager = new CacheManager();
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -49,7 +100,7 @@ function diffWords(original, modified) {
   return result;
 }
 
-function DiffHighlight({ original, modified }) {
+const DiffHighlight = memo(function DiffHighlight({ original, modified }) {
   if (!original || !modified) {
     return <span>{modified || original}</span>;
   }
@@ -58,7 +109,7 @@ function DiffHighlight({ original, modified }) {
     return <span>{original}</span>;
   }
 
-  const diff = diffWords(original, modified);
+  const diff = useMemo(() => diffWords(original, modified), [original, modified]);
 
   return (
     <span>
@@ -81,13 +132,13 @@ function DiffHighlight({ original, modified }) {
       })}
     </span>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────
-// AUDIO PLAYER
+// AUDIO PLAYER (Memoized)
 // ─────────────────────────────────────────────────────────────────
 
-function AudioPlayer({ fileId }) {
+const AudioPlayer = memo(function AudioPlayer({ fileId }) {
   const audioRef = useRef(null);
   const [blobUrl, setBlobUrl] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -101,13 +152,23 @@ function AudioPlayer({ fileId }) {
     setLoading(true);
     setError("");
 
+    // Check cache first
+    const cached = cacheManager.get(`audio_${fileId}`);
+    if (cached) {
+      setBlobUrl(cached);
+      setLoading(false);
+      return;
+    }
+
     const loadAudio = async () => {
       try {
         const res = await api.get(`/api/audio/${fileId}/stream`, { 
-          responseType: "blob" 
+          responseType: "blob",
+          timeout: 30000, // 30s timeout
         });
         objectUrl = URL.createObjectURL(res.data);
         setBlobUrl(objectUrl);
+        cacheManager.set(`audio_${fileId}`, objectUrl);
         setLoading(false);
       } catch (e) {
         setError("Audio unavailable");
@@ -122,35 +183,28 @@ function AudioPlayer({ fileId }) {
     };
   }, [fileId]);
 
-  const toggle = () => {
+  const toggle = useCallback(() => {
     const a = audioRef.current;
     if (!a || !blobUrl) return;
     playing ? a.pause() : a.play();
     setPlaying(!playing);
-  };
+  }, [playing, blobUrl]);
 
-  const seek = (e) => {
+  const seek = useCallback((e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const a = audioRef.current;
-    if (a?.duration) a.currentTime = ((e.clientX - rect.left) / rect.width) * a.duration;
-  };
+    if (a?.duration) {
+      a.currentTime = ((e.clientX - rect.left) / rect.width) * a.duration;
+    }
+  }, []);
 
-  const fmtTime = (s) => {
+  const fmtTime = useCallback((s) => {
     if (!s || isNaN(s)) return "0:00";
     return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
-  };
+  }, []);
 
-  if (loading) return (
-    <div className="dv-player">
-      <span className="dv-time">Loading…</span>
-    </div>
-  );
-
-  if (error) return (
-    <div className="dv-player">
-      <span className="dv-time dv-time-err">{error}</span>
-    </div>
-  );
+  if (loading) return <div className="dv-player"><span className="dv-time">Loading…</span></div>;
+  if (error) return <div className="dv-player"><span className="dv-time dv-time-err">{error}</span></div>;
 
   return (
     <div className="dv-player">
@@ -179,15 +233,18 @@ function AudioPlayer({ fileId }) {
       </span>
     </div>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────
-// ADMIN REVIEW CARD (Memoized for performance)
+// ADMIN REVIEW CARD (Memoized)
 // ─────────────────────────────────────────────────────────────────
 
-const AdminReviewCard = React.memo(function AdminReviewCard({ file, onVerdict, isVerdicting }) {
+const AdminReviewCard = memo(function AdminReviewCard({ file, onVerdict, isVerdicting }) {
   const [note, setNote] = useState("");
   const studentName = file.studentName || file.assignedTo || "Unknown";
+
+  const handleAccept = useCallback(() => onVerdict(file._id, "verified", note), [file._id, note, onVerdict]);
+  const handleReject = useCallback(() => onVerdict(file._id, "rejected", note), [file._id, note, onVerdict]);
 
   return (
     <div className="dv-review-card">
@@ -263,14 +320,14 @@ const AdminReviewCard = React.memo(function AdminReviewCard({ file, onVerdict, i
           <button
             className="dv-btn dv-btn-accept"
             disabled={isVerdicting}
-            onClick={() => onVerdict(file._id, "verified", note)}
+            onClick={handleAccept}
           >
             ✓ Accept
           </button>
           <button
             className="dv-btn dv-btn-reject"
             disabled={isVerdicting}
-            onClick={() => onVerdict(file._id, "rejected", note)}
+            onClick={handleReject}
           >
             ✗ Reject
           </button>
@@ -284,11 +341,16 @@ const AdminReviewCard = React.memo(function AdminReviewCard({ file, onVerdict, i
 // STUDENT FILE CARD (Memoized)
 // ─────────────────────────────────────────────────────────────────
 
-const FileCard = React.memo(function FileCard({ file, onSubmit, isSubmitting }) {
+const FileCard = memo(function FileCard({ file, onSubmit, isSubmitting }) {
   const [rawText, setRawText] = useState(file.studentRawText || file.rawText || "");
   const [normalizedText, setNormalizedText] = useState(file.studentNormalizedText || file.normalizedText || "");
   const isSubmitted = file.status === "submitted";
   const showCountdown = file.status === "assigned" && file.expiresIn > 0;
+  const canSubmit = !isSubmitting && rawText.trim() && normalizedText.trim();
+
+  const handleSubmit = useCallback(() => {
+    onSubmit(file._id, { studentRawText: rawText, studentNormalizedText: normalizedText });
+  }, [file._id, rawText, normalizedText, onSubmit]);
 
   return (
     <div className={`dv-card ${isSubmitted ? "dv-card-submitted" : ""}`}>
@@ -341,8 +403,8 @@ const FileCard = React.memo(function FileCard({ file, onSubmit, isSubmitting }) 
         <div className="dv-card-footer">
           <button
             className="dv-submit-btn"
-            onClick={() => onSubmit(file._id, { studentRawText: rawText, studentNormalizedText: normalizedText })}
-            disabled={isSubmitting || !rawText.trim() || !normalizedText.trim()}
+            onClick={handleSubmit}
+            disabled={!canSubmit}
           >
             {isSubmitting ? "Submitting…" : "✓ Submit"}
           </button>
@@ -356,12 +418,11 @@ const FileCard = React.memo(function FileCard({ file, onSubmit, isSubmitting }) 
 // AVAILABLE ROW (Memoized)
 // ─────────────────────────────────────────────────────────────────
 
-const AvailableRow = React.memo(function AvailableRow({ file, selected, onToggle }) {
+const AvailableRow = memo(function AvailableRow({ file, selected, onToggle }) {
+  const handleClick = useCallback(() => onToggle(file._id), [file._id, onToggle]);
+
   return (
-    <div
-      className={`dv-row ${selected ? "dv-row-selected" : ""}`}
-      onClick={() => onToggle(file._id)}
-    >
+    <div className={`dv-row ${selected ? "dv-row-selected" : ""}`} onClick={handleClick}>
       <div className="dv-row-check">{selected ? "☑" : "☐"}</div>
       <div className="dv-row-id">#{shortId(file._id)}</div>
       <div className="dv-row-info">
@@ -399,37 +460,55 @@ export default function DataValidationPage() {
   const [adminSearch, setAdminSearch] = useState("");
   const [verdicting, setVerdicting] = useState(null);
   const [stats, setStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(false);
 
   // ── shared ──
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const LIMIT = 20;
   const searchTimer = useRef(null);
 
   // ─────────────────────────────────────────────────────────────
-  // LOADERS
+  // MEMOIZED LOADERS
   // ─────────────────────────────────────────────────────────────
 
   const loadMyFiles = useCallback(async () => {
     try {
-      const res = await api.get("/api/audio/my");
-      setMyFiles(res.data.files || []);
+      const cached = cacheManager.get("myFiles");
+      if (cached) {
+        setMyFiles(cached);
+        return;
+      }
+      const res = await api.get("/api/audio/my", { timeout: 10000 });
+      const files = res.data.files || [];
+      cacheManager.set("myFiles", files);
+      setMyFiles(files);
     } catch (e) {
-      console.error("loadMyFiles error:", e.message);
+      setError(e?.response?.data?.message || "Failed to load files");
     }
   }, []);
 
   const loadAvailable = useCallback(async (q = "") => {
     try {
+      const cacheKey = `available_${q}`;
+      const cached = cacheManager.get(cacheKey);
+      if (cached) {
+        setAvailable(cached.items);
+        setAvTotal(cached.total);
+        return;
+      }
+
       setLoading(true);
-      const res = await api.get("/api/audio/available", { params: { q: q || undefined, limit: 500 } });
-      setAvailable(res.data.items || []);
-      setAvTotal(res.data.total || 0);
+      const res = await api.get("/api/audio/available", {
+        params: { q: q || undefined, limit: 500 },
+        timeout: 15000,
+      });
+      const data = { items: res.data.items || [], total: res.data.total || 0 };
+      cacheManager.set(cacheKey, data);
+      setAvailable(data.items);
+      setAvTotal(data.total);
     } catch (e) {
-      console.error("loadAvailable error:", e.message);
+      setError(e?.response?.data?.message || "Failed to load available files");
     } finally {
       setLoading(false);
     }
@@ -437,13 +516,27 @@ export default function DataValidationPage() {
 
   const loadAdminFiles = useCallback(async (page = 1, status = "submitted", q = "") => {
     try {
+      const cacheKey = `admin_${page}_${status}_${q}`;
+      const cached = cacheManager.get(cacheKey);
+      if (cached) {
+        setAdminFiles(cached.items);
+        setAdminTotal(cached.total);
+        setAdminPage(page);
+        return;
+      }
+
       setLoading(true);
-      const res = await api.get("/api/audio", { params: { page, limit: LIMIT, status, q: q || undefined } });
-      setAdminFiles(res.data.items || []);
-      setAdminTotal(res.data.total || 0);
+      const res = await api.get("/api/audio", {
+        params: { page, limit: LIMIT, status, q: q || undefined },
+        timeout: 15000,
+      });
+      const data = { items: res.data.items || [], total: res.data.total || 0 };
+      cacheManager.set(cacheKey, data);
+      setAdminFiles(data.items);
+      setAdminTotal(data.total);
       setAdminPage(page);
     } catch (e) {
-      console.error("loadAdminFiles error:", e.message);
+      setError(e?.response?.data?.message || "Failed to load files");
     } finally {
       setLoading(false);
     }
@@ -451,17 +544,23 @@ export default function DataValidationPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      setStatsLoading(true);
-      const res = await api.get("/api/audio/stats");
+      const cached = cacheManager.get("stats");
+      if (cached) {
+        setStats(cached);
+        return;
+      }
+      const res = await api.get("/api/audio/stats", { timeout: 10000 });
+      cacheManager.set("stats", res.data);
       setStats(res.data);
     } catch (e) {
-      console.error("loadStats error:", e.message);
-    } finally {
-      setStatsLoading(false);
+      console.error("Failed to load stats:", e.message);
     }
   }, []);
 
-  // ✅ Only load on mount
+  // ─────────────────────────────────────────────────────────────
+  // INITIALIZATION
+  // ─────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (isAdmin) {
       loadAdminFiles(1, "submitted", "");
@@ -473,34 +572,41 @@ export default function DataValidationPage() {
   }, [isAdmin, loadAdminFiles, loadMyFiles, loadAvailable, loadStats]);
 
   // ─────────────────────────────────────────────────────────────
-  // SEARCH (Debounced)
+  // SEARCH HANDLERS (Debounced)
   // ─────────────────────────────────────────────────────────────
 
   const handleAvSearch = useCallback((val) => {
     setAvSearch(val);
     clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => loadAvailable(val), 300);
+    searchTimer.current = setTimeout(() => {
+      cacheManager.invalidate("available_");
+      loadAvailable(val);
+    }, SEARCH_DEBOUNCE);
   }, [loadAvailable]);
 
   const handleAdminSearch = useCallback((val) => {
     setAdminSearch(val);
     clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => loadAdminFiles(1, adminStatus, val), 300);
+    searchTimer.current = setTimeout(() => {
+      cacheManager.invalidate("admin_");
+      loadAdminFiles(1, adminStatus, val);
+    }, SEARCH_DEBOUNCE);
   }, [loadAdminFiles, adminStatus]);
 
   const handleStatusChange = useCallback((newStatus) => {
     setAdminStatus(newStatus);
+    cacheManager.invalidate("admin_");
     loadAdminFiles(1, newStatus, adminSearch);
   }, [loadAdminFiles, adminSearch]);
 
   // ─────────────────────────────────────────────────────────────
-  // STUDENT ACTIONS - SUPER OPTIMIZED
+  // STUDENT ACTIONS
   // ─────────────────────────────────────────────────────────────
 
   const toggleSelect = useCallback((id) => {
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id)
-        : prev.length >= 10 ? prev
+        : prev.length >= MAX_PER_DAY ? prev
         : [...prev, id]
     );
   }, []);
@@ -511,7 +617,6 @@ export default function DataValidationPage() {
     const selectedItems = available.filter((f) => selected.includes(f._id));
     const originalState = { available, myFiles, avTotal };
 
-    // ✅ Instant optimistic update
     setAvailable((prev) => prev.filter((f) => !selected.includes(f._id)));
     setMyFiles((prev) => [
       ...prev,
@@ -519,7 +624,7 @@ export default function DataValidationPage() {
         ...f,
         status: "assigned",
         assignedAt: new Date(),
-        expiresIn: 24 * 60 * 60 * 1000,
+        expiresIn: EXPIRE_MS,
       })),
     ]);
     setAvTotal((prev) => Math.max(0, prev - selected.length));
@@ -529,13 +634,15 @@ export default function DataValidationPage() {
     setTab("inprogress");
 
     try {
-      await api.post("/api/audio/assign", { fileIds: selected });
+      await api.post("/api/audio/assign", { fileIds: selected }, { timeout: 20000 });
       setSuccess(`Assigned ${selected.length} file(s).`);
+      cacheManager.invalidate("myFiles");
+      cacheManager.invalidate("available_");
     } catch (e) {
       setAvailable(originalState.available);
       setMyFiles(originalState.myFiles);
       setAvTotal(originalState.avTotal);
-      setError(e?.response?.data?.message || e.message);
+      setError(e?.response?.data?.message || "Assignment failed");
       setTab("available");
     } finally {
       setAssigning(false);
@@ -545,15 +652,13 @@ export default function DataValidationPage() {
   const handleSubmit = useCallback(async (fileId, payload) => {
     const originalFiles = myFiles;
 
-    // ✅ Instant UI update
     setMyFiles((prev) =>
       prev.map((f) =>
         f._id === fileId
           ? {
               ...f,
               status: "submitted",
-              studentRawText: payload.studentRawText,
-              studentNormalizedText: payload.studentNormalizedText,
+              ...payload,
               submittedAt: new Date(),
             }
           : f
@@ -563,55 +668,53 @@ export default function DataValidationPage() {
     setError("");
 
     try {
-      await api.post(`/api/audio/${fileId}/submit`, payload);
+      await api.post(`/api/audio/${fileId}/submit`, payload, { timeout: 15000 });
       setSuccess("Submitted!");
+      cacheManager.invalidate("myFiles");
     } catch (e) {
       setMyFiles(originalFiles);
-      setError(e?.response?.data?.message || e.message);
+      setError(e?.response?.data?.message || "Submission failed");
     } finally {
       setSubmitting(null);
     }
   }, [myFiles]);
 
   // ─────────────────────────────────────────────────────────────
-  // ADMIN ACTIONS - SUPER OPTIMIZED
+  // ADMIN ACTIONS
   // ─────────────────────────────────────────────────────────────
 
   const handleVerdict = useCallback(async (fileId, verdict, adminNote = "") => {
     const originalFiles = adminFiles;
 
-    // ✅ Instant removal from UI
     setAdminFiles((prev) => prev.filter((f) => f._id !== fileId));
     setVerdicting(fileId);
     setError("");
 
-    // ✅ Update stats optimistically
     setStats((prev) => {
       if (!prev) return prev;
       return {
         ...prev,
-        submitted: prev.submitted - 1,
+        submitted: Math.max(0, prev.submitted - 1),
         [verdict]: prev[verdict] + 1,
-        total: prev.total,
       };
     });
 
     try {
-      await api.patch(`/api/audio/${fileId}/verify`, { verdict, adminNote });
+      await api.patch(`/api/audio/${fileId}/verify`, { verdict, adminNote }, { timeout: 15000 });
       setSuccess(`File ${verdict}!`);
+      cacheManager.invalidate("admin_");
+      cacheManager.invalidate("stats");
     } catch (e) {
-      // Rollback
       setAdminFiles(originalFiles);
       setStats((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
           submitted: prev.submitted + 1,
-          [verdict]: prev[verdict] - 1,
-          total: prev.total,
+          [verdict]: Math.max(0, prev[verdict] - 1),
         };
       });
-      setError(e?.response?.data?.message || e.message);
+      setError(e?.response?.data?.message || "Verdict failed");
     } finally {
       setVerdicting(null);
     }
@@ -619,7 +722,10 @@ export default function DataValidationPage() {
 
   const handleExport = useCallback(async (format) => {
     try {
-      const res = await api.get(`/api/audio/export?format=${format}`, { responseType: "blob" });
+      const res = await api.get(`/api/audio/export?format=${format}`, {
+        responseType: "blob",
+        timeout: 30000,
+      });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
@@ -627,22 +733,17 @@ export default function DataValidationPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError("Export failed.");
+      setError("Export failed");
     }
   }, []);
 
   // ─────────────────────────────────────────────────────────────
-  // MEMOIZED COMPUTED VALUES
+  // MEMOIZED VALUES
   // ─────────────────────────────────────────────────────────────
 
   const adminTotalPages = useMemo(() => Math.max(1, Math.ceil(adminTotal / LIMIT)), [adminTotal]);
-
   const inProgressFiles = useMemo(() => myFiles.filter((f) => f.status === "assigned"), [myFiles]);
   const submittedFiles = useMemo(() => myFiles.filter((f) => f.status === "submitted"), [myFiles]);
-
-  // ──────────────────────────���──────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────
 
   if (!user) return <div className="dv-loading">Loading…</div>;
 
@@ -659,9 +760,7 @@ export default function DataValidationPage() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════
-          ADMIN VIEW
-      ══════════════════════════════════════════════════════ */}
+      {/* ADMIN VIEW */}
       {isAdmin && (
         <div>
           <div className="dv-page-header">
@@ -769,9 +868,7 @@ export default function DataValidationPage() {
             >
               Prev
             </button>
-            <span className="dv-page-info">
-              Page {adminPage} / {adminTotalPages}
-            </span>
+            <span className="dv-page-info">Page {adminPage} / {adminTotalPages}</span>
             <button
               className="dv-btn"
               disabled={adminPage >= adminTotalPages}
@@ -779,18 +876,14 @@ export default function DataValidationPage() {
             >
               Next
             </button>
-
             <div style={{ flex: 1 }} />
-
-            <button className="dv-btn" onClick={() => handleExport("json")}>Export JSON</button>
-            <button className="dv-btn" onClick={() => handleExport("csv")}>Export CSV</button>
+            <button className="dv-btn" onClick={() => handleExport("json")}>JSON</button>
+            <button className="dv-btn" onClick={() => handleExport("csv")}>CSV</button>
           </div>
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════
-          STUDENT VIEW
-      ══════════════════════════════════════════════════════ */}
+      {/* STUDENT VIEW */}
       {!isAdmin && (
         <div>
           <div className="dv-page-header">
@@ -806,9 +899,7 @@ export default function DataValidationPage() {
               onClick={() => setTab("inprogress")}
             >
               In Progress
-              {inProgressFiles.length > 0 && (
-                <span className="dv-tab-count">{inProgressFiles.length}</span>
-              )}
+              {inProgressFiles.length > 0 && <span className="dv-tab-count">{inProgressFiles.length}</span>}
             </button>
 
             <button
@@ -816,9 +907,7 @@ export default function DataValidationPage() {
               onClick={() => setTab("submitted")}
             >
               Submitted
-              {submittedFiles.length > 0 && (
-                <span className="dv-tab-count">{submittedFiles.length}</span>
-              )}
+              {submittedFiles.length > 0 && <span className="dv-tab-count">{submittedFiles.length}</span>}
             </button>
 
             <button
@@ -907,7 +996,7 @@ export default function DataValidationPage() {
 
               {selected.length > 0 && (
                 <div className="dv-assign-bar">
-                  <span>{selected.length}/10 selected</span>
+                  <span>{selected.length}/{MAX_PER_DAY} selected</span>
                   <button className="dv-btn" onClick={() => setSelected([])}>Clear</button>
                 </div>
               )}
