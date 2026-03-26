@@ -14,6 +14,34 @@ const SEARCH_DEBOUNCE = 300;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // ─────────────────────────────────────────────────────────────────
+// AUDIO LOADING QUEUE (Prevent concurrent request overload)
+// ─────────────────────────────────────────────────────────────────
+
+class AudioLoadQueue {
+  constructor(maxConcurrent = 3) {
+    this.maxConcurrent = maxConcurrent;
+    this.activeCount = 0;
+    this.queue = [];
+  }
+
+  async load(fileId, loaderFn) {
+    // Wait until we have capacity
+    while (this.activeCount >= this.maxConcurrent) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    this.activeCount++;
+    try {
+      return await loaderFn();
+    } finally {
+      this.activeCount--;
+    }
+  }
+}
+
+const audioLoadQueue = new AudioLoadQueue(3);
+
+// ─────────────────────────────────────────────────────────────────
 // CACHE LAYER
 // ─────────────────────────────────────────────────────────────────
 
@@ -135,7 +163,7 @@ const DiffHighlight = memo(function DiffHighlight({ original, modified }) {
 });
 
 // ─────────────────────────────────────────────────────────────────
-// AUDIO PLAYER (Memoized with Debugging)
+// AUDIO PLAYER (Memoized with Loading Queue)
 // ─────────────────────────────────────────────────────────────────
 
 const AudioPlayer = memo(function AudioPlayer({ fileId }) {
@@ -163,26 +191,30 @@ const AudioPlayer = memo(function AudioPlayer({ fileId }) {
 
     const loadAudio = async () => {
       try {
-        console.log(`[AudioPlayer] Loading audio: ${fileId}`);
-        const res = await api.get(`/api/audio/${fileId}/stream`, { 
-          responseType: "blob",
-          timeout: 30000,
+        console.log(`[AudioPlayer] Queuing audio load: ${fileId}`);
+        
+        await audioLoadQueue.load(fileId, async () => {
+          console.log(`[AudioPlayer] Loading audio: ${fileId}`);
+          const res = await api.get(`/api/audio/${fileId}/stream`, { 
+            responseType: "blob",
+            timeout: 60000,
+          });
+          
+          console.log(`[AudioPlayer] Got response:`, res.status, res.data?.size, res.data?.type);
+          
+          if (!res.data || res.data.size === 0) {
+            console.error(`[AudioPlayer] Empty response`);
+            setError("Empty audio response");
+            return;
+          }
+
+          objectUrl = URL.createObjectURL(res.data);
+          console.log(`[AudioPlayer] Created object URL:`, objectUrl);
+          setBlobUrl(objectUrl);
+          cacheManager.set(`audio_${fileId}`, objectUrl);
+          console.log(`[AudioPlayer] Audio loaded successfully`);
         });
         
-        console.log(`[AudioPlayer] Got response:`, res.status, res.data?.size, res.data?.type);
-        
-        if (!res.data || res.data.size === 0) {
-          console.error(`[AudioPlayer] Empty response`);
-          setError("Empty audio response");
-          setLoading(false);
-          return;
-        }
-
-        objectUrl = URL.createObjectURL(res.data);
-        console.log(`[AudioPlayer] Created object URL:`, objectUrl);
-        setBlobUrl(objectUrl);
-        cacheManager.set(`audio_${fileId}`, objectUrl);
-        console.log(`[AudioPlayer] Audio loaded successfully`);
         setLoading(false);
       } catch (e) {
         console.error(`[AudioPlayer] Error loading audio:`, {
@@ -499,17 +531,14 @@ export default function DataValidationPage() {
     try {
       const cached = cacheManager.get("myFiles");
       if (cached) {
-        console.log("[DataValidation] Using cached myFiles");
         setMyFiles(cached);
         return;
       }
-      console.log("[DataValidation] Loading myFiles");
       const res = await api.get("/api/audio/my", { timeout: 10000 });
       const files = res.data.files || [];
       cacheManager.set("myFiles", files);
       setMyFiles(files);
     } catch (e) {
-      console.error("[DataValidation] loadMyFiles error:", e);
       setError(e?.response?.data?.message || "Failed to load files");
     }
   }, []);
@@ -519,13 +548,11 @@ export default function DataValidationPage() {
       const cacheKey = `available_${q}`;
       const cached = cacheManager.get(cacheKey);
       if (cached) {
-        console.log(`[DataValidation] Using cached available (q=${q})`);
         setAvailable(cached.items);
         setAvTotal(cached.total);
         return;
       }
 
-      console.log(`[DataValidation] Loading available (q=${q})`);
       setLoading(true);
       const res = await api.get("/api/audio/available", {
         params: { q: q || undefined, limit: 500 },
@@ -536,7 +563,6 @@ export default function DataValidationPage() {
       setAvailable(data.items);
       setAvTotal(data.total);
     } catch (e) {
-      console.error("[DataValidation] loadAvailable error:", e);
       setError(e?.response?.data?.message || "Failed to load available files");
     } finally {
       setLoading(false);
@@ -548,14 +574,12 @@ export default function DataValidationPage() {
       const cacheKey = `admin_${page}_${status}_${q}`;
       const cached = cacheManager.get(cacheKey);
       if (cached) {
-        console.log(`[DataValidation] Using cached admin (page=${page}, status=${status})`);
         setAdminFiles(cached.items);
         setAdminTotal(cached.total);
         setAdminPage(page);
         return;
       }
 
-      console.log(`[DataValidation] Loading admin (page=${page}, status=${status})`);
       setLoading(true);
       const res = await api.get("/api/audio", {
         params: { page, limit: LIMIT, status, q: q || undefined },
@@ -567,7 +591,6 @@ export default function DataValidationPage() {
       setAdminTotal(data.total);
       setAdminPage(page);
     } catch (e) {
-      console.error("[DataValidation] loadAdminFiles error:", e);
       setError(e?.response?.data?.message || "Failed to load files");
     } finally {
       setLoading(false);
@@ -578,16 +601,14 @@ export default function DataValidationPage() {
     try {
       const cached = cacheManager.get("stats");
       if (cached) {
-        console.log("[DataValidation] Using cached stats");
         setStats(cached);
         return;
       }
-      console.log("[DataValidation] Loading stats");
       const res = await api.get("/api/audio/stats", { timeout: 10000 });
       cacheManager.set("stats", res.data);
       setStats(res.data);
     } catch (e) {
-      console.error("[DataValidation] loadStats error:", e.message);
+      console.error("Failed to load stats:", e.message);
     }
   }, []);
 
@@ -596,7 +617,6 @@ export default function DataValidationPage() {
   // ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    console.log("[DataValidation] Initializing, isAdmin =", isAdmin);
     if (isAdmin) {
       loadAdminFiles(1, "submitted", "");
       loadStats();
@@ -614,7 +634,6 @@ export default function DataValidationPage() {
     setAvSearch(val);
     clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => {
-      console.log(`[DataValidation] Searching available for: ${val}`);
       cacheManager.invalidate("available_");
       loadAvailable(val);
     }, SEARCH_DEBOUNCE);
@@ -624,14 +643,12 @@ export default function DataValidationPage() {
     setAdminSearch(val);
     clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => {
-      console.log(`[DataValidation] Searching admin for: ${val}`);
       cacheManager.invalidate("admin_");
       loadAdminFiles(1, adminStatus, val);
     }, SEARCH_DEBOUNCE);
   }, [loadAdminFiles, adminStatus]);
 
   const handleStatusChange = useCallback((newStatus) => {
-    console.log(`[DataValidation] Status changed to: ${newStatus}`);
     setAdminStatus(newStatus);
     cacheManager.invalidate("admin_");
     loadAdminFiles(1, newStatus, adminSearch);
@@ -672,13 +689,11 @@ export default function DataValidationPage() {
     setTab("inprogress");
 
     try {
-      console.log(`[DataValidation] Assigning ${selected.length} files`);
       await api.post("/api/audio/assign", { fileIds: selected }, { timeout: 20000 });
       setSuccess(`Assigned ${selected.length} file(s).`);
       cacheManager.invalidate("myFiles");
       cacheManager.invalidate("available_");
     } catch (e) {
-      console.error("[DataValidation] Assignment failed:", e);
       setAvailable(originalState.available);
       setMyFiles(originalState.myFiles);
       setAvTotal(originalState.avTotal);
@@ -708,12 +723,10 @@ export default function DataValidationPage() {
     setError("");
 
     try {
-      console.log(`[DataValidation] Submitting file ${fileId}`);
       await api.post(`/api/audio/${fileId}/submit`, payload, { timeout: 15000 });
       setSuccess("Submitted!");
       cacheManager.invalidate("myFiles");
     } catch (e) {
-      console.error("[DataValidation] Submission failed:", e);
       setMyFiles(originalFiles);
       setError(e?.response?.data?.message || "Submission failed");
     } finally {
@@ -721,7 +734,7 @@ export default function DataValidationPage() {
     }
   }, [myFiles]);
 
-  // ─────────────────────────────────────────────────────────────
+  // ───────────────────────────────────���─────────────────────────
   // ADMIN ACTIONS
   // ─────────────────────────────────────────────────────────────
 
@@ -742,13 +755,11 @@ export default function DataValidationPage() {
     });
 
     try {
-      console.log(`[DataValidation] Submitting verdict: ${fileId} = ${verdict}`);
       await api.patch(`/api/audio/${fileId}/verify`, { verdict, adminNote }, { timeout: 15000 });
       setSuccess(`File ${verdict}!`);
       cacheManager.invalidate("admin_");
       cacheManager.invalidate("stats");
     } catch (e) {
-      console.error("[DataValidation] Verdict failed:", e);
       setAdminFiles(originalFiles);
       setStats((prev) => {
         if (!prev) return prev;
@@ -766,7 +777,6 @@ export default function DataValidationPage() {
 
   const handleExport = useCallback(async (format) => {
     try {
-      console.log(`[DataValidation] Exporting as ${format}`);
       const res = await api.get(`/api/audio/export?format=${format}`, {
         responseType: "blob",
         timeout: 30000,
@@ -778,7 +788,6 @@ export default function DataValidationPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      console.error("[DataValidation] Export failed:", e);
       setError("Export failed");
     }
   }, []);
