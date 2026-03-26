@@ -43,7 +43,7 @@
 .dv-alert-close   { font-size: 16px; opacity: 0.5; margin-left: 12px; }
 
 /* ─────────────────────────────────────────────────────────────
-   STAT CARDS — consistent, no colors on numbers
+   STAT CARDS
 ───────────────────────────────────────────────────────────── */
 
 .dv-stats {
@@ -76,7 +76,7 @@
   line-height: 1;
 }
 
-/* ─────────────────────────────────────────────────────────────
+/* ───────────────────────────────────────────────────���─────────
    TOOLBAR
 ───────────────────────────────────────────────────────────── */
 
@@ -200,6 +200,15 @@
 
 .dv-time     { font-size: 11px; color: #6b7280; white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; }
 .dv-time-err { color: #dc2626; }
+
+/* ✅ NEW: Quality indicator */
+.dv-quality {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-left: 8px;
+  white-space: nowrap;
+}
 
 /* ─────────────────────────────────────────────────────────────
    ADMIN REVIEW CARDS
@@ -602,7 +611,7 @@
 
 .dv-page-info { font-size: 12px; color: #6b7280; }
 
-/* ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────���───────────
    EMPTY / LOADING
 ───────────────────────────────────────────────────────────── */
 
@@ -671,7 +680,11 @@
   white-space: pre-wrap;
   min-height: 56px;
 }
-/* Diff highlighting */
+
+/* ─────────────────────────────────────────────────────────────
+   DIFF HIGHLIGHTING
+───────────────────────────────────────────────────────────── */
+
 .dv-diff-added {
   background-color: #fecaca; /* Light red */
   color: #991b1b; /* Dark red */
@@ -687,7 +700,7 @@
   color: #6b7280; /* Dark gray */
   padding: 0 2px;
   border-radius: 2px;
-  text-decoration: line-through; /* remove this too if you don’t want strike */
+  text-decoration: line-through;
   opacity: 0.7;
   position: relative;
   cursor: help;
@@ -697,5 +710,34 @@
 .dv-diff-added:hover,
 .dv-diff-removed:hover {
   opacity: 1;
-  box-shadow: 0 0 4px rgba(0,0,0,0.2);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .dv-stats { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .dv-review-cols { grid-template-columns: 1fr; }
+  .dv-fields      { grid-template-columns: 1fr; }
+  .dv-submitted-texts { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .dv-stats { grid-template-columns: repeat(2, 1fr); }
+  .dv-row   { grid-template-columns: 28px 1fr; }
+  .dv-row-id    { display: none; }
+  .dv-row-text  { display: none; }
+}
+
+@media (max-width: 480px) {
+  .dv-stats { grid-template-columns: 1fr; }
+  .dv-tabs  { flex-wrap: wrap; }
+  .dv-player { flex-direction: column; align-items: stretch; }
+  .dv-play-btn { width: 100%; }
+  .dv-track { margin: 8px 0; }
 }
