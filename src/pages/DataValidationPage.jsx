@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import "./DataValidation.css";
@@ -16,9 +16,6 @@ const fmtCountdown = (ms) => {
 
 const shortId = (id) => String(id).slice(-6).toUpperCase();
 
-/**
- * Simple word-level diff
- */
 function diffWords(original, modified) {
   const origWords = original.split(/(\s+)/);
   const modWords = modified.split(/(\s+)/);
@@ -52,9 +49,6 @@ function diffWords(original, modified) {
   return result;
 }
 
-/**
- * Render diff with colored spans
- */
 function DiffHighlight({ original, modified }) {
   if (!original || !modified) {
     return <span>{modified || original}</span>;
@@ -73,13 +67,13 @@ function DiffHighlight({ original, modified }) {
           return <span key={idx}>{segment.text}</span>;
         } else if (segment.type === 'added') {
           return (
-            <span key={idx} className="dv-diff-added" title="Added by student">
+            <span key={idx} className="dv-diff-added">
               {segment.text}
             </span>
           );
         } else {
           return (
-            <span key={idx} className="dv-diff-removed" title="Removed from original">
+            <span key={idx} className="dv-diff-removed">
               {segment.text}
             </span>
           );
@@ -90,7 +84,7 @@ function DiffHighlight({ original, modified }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// AUDIO PLAYER - FAST (Direct 48kHz streaming)
+// AUDIO PLAYER
 // ─────────────────────────────────────────────────────────────────
 
 function AudioPlayer({ fileId }) {
@@ -148,7 +142,7 @@ function AudioPlayer({ fileId }) {
 
   if (loading) return (
     <div className="dv-player">
-      <span className="dv-time">Loading audio…</span>
+      <span className="dv-time">Loading…</span>
     </div>
   );
 
@@ -188,10 +182,10 @@ function AudioPlayer({ fileId }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ADMIN REVIEW CARD
+// ADMIN REVIEW CARD (Memoized for performance)
 // ─────────────────────────────────────────────────────────────────
 
-function AdminReviewCard({ file, onVerdict, isVerdicting }) {
+const AdminReviewCard = React.memo(function AdminReviewCard({ file, onVerdict, isVerdicting }) {
   const [note, setNote] = useState("");
   const studentName = file.studentName || file.assignedTo || "Unknown";
 
@@ -204,7 +198,7 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
           <span className="dv-review-folder">{file.movieFolder}</span>
         </div>
         <div className="dv-review-headright">
-          <span className="dv-review-student">submitted by {studentName}</span>
+          <span className="dv-review-student">by {studentName}</span>
         </div>
       </div>
 
@@ -220,11 +214,11 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
           <div className="dv-review-col-section">
             <div className="dv-review-col-sublabel">Original</div>
             <div className="dv-review-text dv-review-text-original">
-              {file.rawText || <em className="dv-no-text">No original text</em>}
+              {file.rawText || <em className="dv-no-text">No text</em>}
             </div>
           </div>
           <div className="dv-review-col-section">
-            <div className="dv-review-col-sublabel">Student correction (diff highlighted)</div>
+            <div className="dv-review-col-sublabel">Correction</div>
             <div className={`dv-review-text ${file.studentRawText ? "dv-review-text-student" : "dv-review-text-empty"}`}>
               {file.studentRawText ? (
                 <DiffHighlight original={file.rawText || ""} modified={file.studentRawText} />
@@ -242,11 +236,11 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
           <div className="dv-review-col-section">
             <div className="dv-review-col-sublabel">Original</div>
             <div className="dv-review-text dv-review-text-original">
-              {file.normalizedText || <em className="dv-no-text">No original text</em>}
+              {file.normalizedText || <em className="dv-no-text">No text</em>}
             </div>
           </div>
           <div className="dv-review-col-section">
-            <div className="dv-review-col-sublabel">Student correction (diff highlighted)</div>
+            <div className="dv-review-col-sublabel">Correction</div>
             <div className={`dv-review-text ${file.studentNormalizedText ? "dv-review-text-student" : "dv-review-text-empty"}`}>
               {file.studentNormalizedText ? (
                 <DiffHighlight original={file.normalizedText || ""} modified={file.studentNormalizedText} />
@@ -261,7 +255,7 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
       <div className="dv-review-footer">
         <input
           className="dv-note-input"
-          placeholder="Admin note (optional)…"
+          placeholder="Admin note…"
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
@@ -284,13 +278,13 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
       </div>
     </div>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────
-// STUDENT FILE CARD
+// STUDENT FILE CARD (Memoized)
 // ─────────────────────────────────────────────────────────────────
 
-function FileCard({ file, onSubmit, isSubmitting }) {
+const FileCard = React.memo(function FileCard({ file, onSubmit, isSubmitting }) {
   const [rawText, setRawText] = useState(file.studentRawText || file.rawText || "");
   const [normalizedText, setNormalizedText] = useState(file.studentNormalizedText || file.normalizedText || "");
   const isSubmitted = file.status === "submitted";
@@ -328,7 +322,7 @@ function FileCard({ file, onSubmit, isSubmitting }) {
             onChange={(e) => setRawText(e.target.value)}
             rows={3}
             disabled={isSubmitted}
-            placeholder="Raw text from transcript…"
+            placeholder="Raw text…"
           />
         </div>
         <div className="dv-field">
@@ -338,7 +332,7 @@ function FileCard({ file, onSubmit, isSubmitting }) {
             onChange={(e) => setNormalizedText(e.target.value)}
             rows={3}
             disabled={isSubmitted}
-            placeholder="Corrected normalized text…"
+            placeholder="Normalized text…"
           />
         </div>
       </div>
@@ -356,13 +350,13 @@ function FileCard({ file, onSubmit, isSubmitting }) {
       )}
     </div>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────
-// AVAILABLE ROW
+// AVAILABLE ROW (Memoized)
 // ─────────────────────────────────────────────────────────────────
 
-function AvailableRow({ file, selected, onToggle }) {
+const AvailableRow = React.memo(function AvailableRow({ file, selected, onToggle }) {
   return (
     <div
       className={`dv-row ${selected ? "dv-row-selected" : ""}`}
@@ -377,7 +371,7 @@ function AvailableRow({ file, selected, onToggle }) {
       <div className="dv-row-text">{file.rawText || <em>No text</em>}</div>
     </div>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────
 // MAIN PAGE
@@ -405,6 +399,7 @@ export default function DataValidationPage() {
   const [adminSearch, setAdminSearch] = useState("");
   const [verdicting, setVerdicting] = useState(null);
   const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   // ── shared ──
   const [loading, setLoading] = useState(false);
@@ -418,14 +413,14 @@ export default function DataValidationPage() {
   // LOADERS
   // ─────────────────────────────────────────────────────────────
 
-  const loadMyFiles = async () => {
+  const loadMyFiles = useCallback(async () => {
     try {
       const res = await api.get("/api/audio/my");
       setMyFiles(res.data.files || []);
     } catch (e) {
-      setError(e?.response?.data?.message || e.message);
+      console.error("loadMyFiles error:", e.message);
     }
-  };
+  }, []);
 
   const loadAvailable = useCallback(async (q = "") => {
     try {
@@ -434,13 +429,13 @@ export default function DataValidationPage() {
       setAvailable(res.data.items || []);
       setAvTotal(res.data.total || 0);
     } catch (e) {
-      setError(e?.response?.data?.message || e.message);
+      console.error("loadAvailable error:", e.message);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const loadAdminFiles = async (page = 1, status = adminStatus, q = adminSearch) => {
+  const loadAdminFiles = useCallback(async (page = 1, status = "submitted", q = "") => {
     try {
       setLoading(true);
       const res = await api.get("/api/audio", { params: { page, limit: LIMIT, status, q: q || undefined } });
@@ -448,80 +443,85 @@ export default function DataValidationPage() {
       setAdminTotal(res.data.total || 0);
       setAdminPage(page);
     } catch (e) {
-      setError(e?.response?.data?.message || e.message);
+      console.error("loadAdminFiles error:", e.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
+      setStatsLoading(true);
       const res = await api.get("/api/audio/stats");
       setStats(res.data);
     } catch (e) {
-      console.error("[DataValidation] loadStats:", e.message);
+      console.error("loadStats error:", e.message);
+    } finally {
+      setStatsLoading(false);
     }
-  };
+  }, []);
 
   // ✅ Only load on mount
   useEffect(() => {
     if (isAdmin) {
-      loadAdminFiles(1, "submitted");
+      loadAdminFiles(1, "submitted", "");
       loadStats();
     } else {
       loadMyFiles();
       loadAvailable("");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin]);
+  }, [isAdmin, loadAdminFiles, loadMyFiles, loadAvailable, loadStats]);
 
-  const handleAvSearch = (val) => {
+  // ─────────────────────────────────────────────────────────────
+  // SEARCH (Debounced)
+  // ─────────────────────────────────────────────────────────────
+
+  const handleAvSearch = useCallback((val) => {
     setAvSearch(val);
     clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => loadAvailable(val), 300);
-  };
+  }, [loadAvailable]);
 
-  const handleAdminSearch = (val) => {
+  const handleAdminSearch = useCallback((val) => {
     setAdminSearch(val);
     clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => loadAdminFiles(1, adminStatus, val), 300);
-  };
+  }, [loadAdminFiles, adminStatus]);
+
+  const handleStatusChange = useCallback((newStatus) => {
+    setAdminStatus(newStatus);
+    loadAdminFiles(1, newStatus, adminSearch);
+  }, [loadAdminFiles, adminSearch]);
 
   // ─────────────────────────────────────────────────────────────
-  // STUDENT ACTIONS - OPTIMISTIC UPDATES
+  // STUDENT ACTIONS - SUPER OPTIMIZED
   // ─────────────────────────────────────────────────────────────
 
-  const toggleSelect = (id) => {
+  const toggleSelect = useCallback((id) => {
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id)
         : prev.length >= 10 ? prev
         : [...prev, id]
     );
-  };
+  }, []);
 
-  const handleAssign = async () => {
+  const handleAssign = useCallback(async () => {
     if (!selected.length) return;
 
-    // ✅ Optimistic update - immediately mark as assigned
     const selectedItems = available.filter((f) => selected.includes(f._id));
-    const updatedAvailable = available.filter((f) => !selected.includes(f._id));
-    const updatedMyFiles = [
-      ...myFiles,
+    const originalState = { available, myFiles, avTotal };
+
+    // ✅ Instant optimistic update
+    setAvailable((prev) => prev.filter((f) => !selected.includes(f._id)));
+    setMyFiles((prev) => [
+      ...prev,
       ...selectedItems.map((f) => ({
         ...f,
         status: "assigned",
         assignedAt: new Date(),
         expiresIn: 24 * 60 * 60 * 1000,
       })),
-    ];
-
-    // Store original state for rollback
-    const originalAvailable = available;
-    const originalMyFiles = myFiles;
-    const originalAvTotal = avTotal;
-
-    setAvailable(updatedAvailable);
-    setMyFiles(updatedMyFiles);
+    ]);
     setAvTotal((prev) => Math.max(0, prev - selected.length));
     setSelected([]);
     setAssigning(true);
@@ -529,26 +529,23 @@ export default function DataValidationPage() {
     setTab("inprogress");
 
     try {
-      const res = await api.post("/api/audio/assign", { fileIds: selected });
-      setSuccess(`Assigned ${res.data.assigned} file(s).`);
-
-      // ✅ Verify in background (non-blocking)
-      loadAvailable(avSearch).catch(() => {});
+      await api.post("/api/audio/assign", { fileIds: selected });
+      setSuccess(`Assigned ${selected.length} file(s).`);
     } catch (e) {
-      // ❌ Restore on error
-      setAvailable(originalAvailable);
-      setMyFiles(originalMyFiles);
-      setAvTotal(originalAvTotal);
+      setAvailable(originalState.available);
+      setMyFiles(originalState.myFiles);
+      setAvTotal(originalState.avTotal);
       setError(e?.response?.data?.message || e.message);
       setTab("available");
     } finally {
       setAssigning(false);
     }
-  };
+  }, [selected, available, myFiles, avTotal]);
 
-  const handleSubmit = async (fileId, payload) => {
-    // ✅ Update UI immediately (optimistic)
+  const handleSubmit = useCallback(async (fileId, payload) => {
     const originalFiles = myFiles;
+
+    // ✅ Instant UI update
     setMyFiles((prev) =>
       prev.map((f) =>
         f._id === fileId
@@ -567,50 +564,60 @@ export default function DataValidationPage() {
 
     try {
       await api.post(`/api/audio/${fileId}/submit`, payload);
-      setSuccess("Submitted successfully.");
-
-      // ✅ Don't reload - optimistic update already applied
-      // Just verify the file in background
-      loadMyFiles().catch(() => {});
+      setSuccess("Submitted!");
     } catch (e) {
-      // ❌ Restore on error
       setMyFiles(originalFiles);
       setError(e?.response?.data?.message || e.message);
     } finally {
       setSubmitting(null);
     }
-  };
+  }, [myFiles]);
 
   // ─────────────────────────────────────────────────────────────
-  // ADMIN ACTIONS - OPTIMISTIC UPDATES
+  // ADMIN ACTIONS - SUPER OPTIMIZED
   // ─────────────────────────────────────────────────────────────
 
-  const handleVerdict = async (fileId, verdict, adminNote = "") => {
-    // ✅ Remove from UI immediately (optimistic)
+  const handleVerdict = useCallback(async (fileId, verdict, adminNote = "") => {
     const originalFiles = adminFiles;
+
+    // ✅ Instant removal from UI
     setAdminFiles((prev) => prev.filter((f) => f._id !== fileId));
     setVerdicting(fileId);
     setError("");
 
+    // ✅ Update stats optimistically
+    setStats((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        submitted: prev.submitted - 1,
+        [verdict]: prev[verdict] + 1,
+        total: prev.total,
+      };
+    });
+
     try {
       await api.patch(`/api/audio/${fileId}/verify`, { verdict, adminNote });
-      setSuccess(`File ${verdict}.`);
-
-      // ✅ Only reload current page (don't reload everything)
-      await loadAdminFiles(adminPage, adminStatus, adminSearch);
-
-      // ✅ Update stats in background (non-blocking)
-      loadStats().catch(() => {});
+      setSuccess(`File ${verdict}!`);
     } catch (e) {
-      // ❌ Restore on error
+      // Rollback
       setAdminFiles(originalFiles);
+      setStats((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          submitted: prev.submitted + 1,
+          [verdict]: prev[verdict] - 1,
+          total: prev.total,
+        };
+      });
       setError(e?.response?.data?.message || e.message);
     } finally {
       setVerdicting(null);
     }
-  };
+  }, [adminFiles]);
 
-  const handleExport = async (format) => {
+  const handleExport = useCallback(async (format) => {
     try {
       const res = await api.get(`/api/audio/export?format=${format}`, { responseType: "blob" });
       const url = URL.createObjectURL(res.data);
@@ -622,13 +629,22 @@ export default function DataValidationPage() {
     } catch (e) {
       setError("Export failed.");
     }
-  };
-
-  const adminTotalPages = Math.max(1, Math.ceil(adminTotal / LIMIT));
+  }, []);
 
   // ─────────────────────────────────────────────────────────────
+  // MEMOIZED COMPUTED VALUES
+  // ─────────────────────────────────────────────────────────────
+
+  const adminTotalPages = useMemo(() => Math.max(1, Math.ceil(adminTotal / LIMIT)), [adminTotal]);
+
+  const inProgressFiles = useMemo(() => myFiles.filter((f) => f.status === "assigned"), [myFiles]);
+  const submittedFiles = useMemo(() => myFiles.filter((f) => f.status === "submitted"), [myFiles]);
+
+  // ──────────────────────────���──────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────
+
+  if (!user) return <div className="dv-loading">Loading…</div>;
 
   return (
     <div className="dv">
@@ -645,13 +661,13 @@ export default function DataValidationPage() {
 
       {/* ══════════════════════════════════════════════════════
           ADMIN VIEW
-      ═══════════════════════════════════════════════���══════ */}
+      ══════════════════════════════════════════════════════ */}
       {isAdmin && (
         <div>
           <div className="dv-page-header">
             <div>
               <h2 className="dv-title">Data Validation</h2>
-              <p className="dv-sub">Listen to audio · compare original vs student correction · accept or reject</p>
+              <p className="dv-sub">Listen · compare · accept/reject</p>
             </div>
           </div>
 
@@ -681,10 +697,7 @@ export default function DataValidationPage() {
                 <button
                   key={s}
                   className={`dv-tab ${adminStatus === s ? "dv-tab-active" : ""}`}
-                  onClick={() => {
-                    setAdminStatus(s);
-                    loadAdminFiles(1, s, adminSearch);
-                  }}
+                  onClick={() => handleStatusChange(s)}
                 >
                   {s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
@@ -692,7 +705,7 @@ export default function DataValidationPage() {
             </div>
             <input
               className="dv-search"
-              placeholder="Search filename, text…"
+              placeholder="Search…"
               value={adminSearch}
               onChange={(e) => handleAdminSearch(e.target.value)}
             />
@@ -723,7 +736,7 @@ export default function DataValidationPage() {
                     <th>Folder</th>
                     <th>Student</th>
                     <th>Raw Text</th>
-                    <th>Normalized Text</th>
+                    <th>Normalized</th>
                     <th>Audio</th>
                   </tr>
                 </thead>
@@ -740,9 +753,7 @@ export default function DataValidationPage() {
                       <td className="dv-cell-text-full">
                         <DiffHighlight original={f.normalizedText || ""} modified={f.studentNormalizedText || ""} />
                       </td>
-                      <td>
-                        <AudioPlayer fileId={f._id} />
-                      </td>
+                      <td><AudioPlayer fileId={f._id} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -759,7 +770,7 @@ export default function DataValidationPage() {
               Prev
             </button>
             <span className="dv-page-info">
-              Page {adminPage} / {adminTotalPages} · {adminTotal} files
+              Page {adminPage} / {adminTotalPages}
             </span>
             <button
               className="dv-btn"
@@ -771,12 +782,8 @@ export default function DataValidationPage() {
 
             <div style={{ flex: 1 }} />
 
-            <button className="dv-btn" onClick={() => handleExport("json")}>
-              Export JSON
-            </button>
-            <button className="dv-btn" onClick={() => handleExport("csv")}>
-              Export CSV
-            </button>
+            <button className="dv-btn" onClick={() => handleExport("json")}>Export JSON</button>
+            <button className="dv-btn" onClick={() => handleExport("csv")}>Export CSV</button>
           </div>
         </div>
       )}
@@ -789,7 +796,7 @@ export default function DataValidationPage() {
           <div className="dv-page-header">
             <div>
               <h2 className="dv-title">Data Validation</h2>
-              <p className="dv-sub">Listen · correct · submit · max 10 files per day</p>
+              <p className="dv-sub">Listen · correct · submit</p>
             </div>
           </div>
 
@@ -799,10 +806,8 @@ export default function DataValidationPage() {
               onClick={() => setTab("inprogress")}
             >
               In Progress
-              {myFiles.filter((f) => f.status === "assigned").length > 0 && (
-                <span className="dv-tab-count">
-                  {myFiles.filter((f) => f.status === "assigned").length}
-                </span>
+              {inProgressFiles.length > 0 && (
+                <span className="dv-tab-count">{inProgressFiles.length}</span>
               )}
             </button>
 
@@ -811,96 +816,81 @@ export default function DataValidationPage() {
               onClick={() => setTab("submitted")}
             >
               Submitted
-              {myFiles.filter((f) => f.status === "submitted").length > 0 && (
-                <span className="dv-tab-count">
-                  {myFiles.filter((f) => f.status === "submitted").length}
-                </span>
+              {submittedFiles.length > 0 && (
+                <span className="dv-tab-count">{submittedFiles.length}</span>
               )}
             </button>
 
             <button
               className={`dv-tab ${tab === "available" ? "dv-tab-active" : ""}`}
-              onClick={() => {
-                setTab("available");
-                loadAvailable(avSearch);
-              }}
+              onClick={() => setTab("available")}
             >
               Available <span className="dv-tab-count">{avTotal}</span>
             </button>
           </div>
 
-          {/* ── In Progress ── */}
-          {tab === "inprogress" && (() => {
-            const inProgress = myFiles.filter((f) => f.status === "assigned");
-            return inProgress.length === 0 ? (
-              <div className="dv-empty">
-                No files in progress. Go to Available to pick some.
-              </div>
-            ) : (
-              <div>
-                {inProgress.map((f) => (
-                  <FileCard
-                    key={f._id}
-                    file={f}
-                    onSubmit={handleSubmit}
-                    isSubmitting={submitting === f._id}
-                  />
-                ))}
-              </div>
-            );
-          })()}
+          {tab === "inprogress" && (
+            <>
+              {inProgressFiles.length === 0 ? (
+                <div className="dv-empty">No files in progress.</div>
+              ) : (
+                <div>
+                  {inProgressFiles.map((f) => (
+                    <FileCard
+                      key={f._id}
+                      file={f}
+                      onSubmit={handleSubmit}
+                      isSubmitting={submitting === f._id}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
 
-          {/* ── Submitted — read-only view ── */}
-          {tab === "submitted" && (() => {
-            const submitted = myFiles.filter((f) => f.status === "submitted");
-            return submitted.length === 0 ? (
-              <div className="dv-empty">
-                No submitted files yet. Submit a file from In Progress to see it here.
-              </div>
-            ) : (
-              <div>
-                {submitted.map((f) => (
-                  <div key={f._id} className="dv-submitted-item">
-                    <div className="dv-submitted-head">
-                      <div className="dv-submitted-headleft">
-                        <span className="dv-filename">{f.filename}</span>
-                        <span className="dv-id">#{shortId(f._id)}</span>
-                        <span className="dv-path">
-                          {f.movieFolder}{f.chapterFolder ? ` / ${f.chapterFolder}` : ""}
-                        </span>
-                      </div>
-                      <span className="dv-badge-submitted">Submitted ✓</span>
-                    </div>
-
-                    <AudioPlayer fileId={f._id} />
-
-                    <div className="dv-submitted-texts">
-                      <div className="dv-submitted-col">
-                        <div className="dv-submitted-label">Raw Text</div>
-                        <div className="dv-submitted-text">
-                          <DiffHighlight original={f.rawText || ""} modified={f.studentRawText || ""} />
+          {tab === "submitted" && (
+            <>
+              {submittedFiles.length === 0 ? (
+                <div className="dv-empty">No submitted files.</div>
+              ) : (
+                <div>
+                  {submittedFiles.map((f) => (
+                    <div key={f._id} className="dv-submitted-item">
+                      <div className="dv-submitted-head">
+                        <div className="dv-submitted-headleft">
+                          <span className="dv-filename">{f.filename}</span>
+                          <span className="dv-id">#{shortId(f._id)}</span>
                         </div>
+                        <span className="dv-badge-submitted">Submitted ✓</span>
                       </div>
-                      <div className="dv-submitted-col">
-                        <div className="dv-submitted-label">Normalized Text</div>
-                        <div className="dv-submitted-text">
-                          <DiffHighlight original={f.normalizedText || ""} modified={f.studentNormalizedText || ""} />
+                      <AudioPlayer fileId={f._id} />
+                      <div className="dv-submitted-texts">
+                        <div className="dv-submitted-col">
+                          <div className="dv-submitted-label">Raw Text</div>
+                          <div className="dv-submitted-text">
+                            <DiffHighlight original={f.rawText || ""} modified={f.studentRawText || ""} />
+                          </div>
+                        </div>
+                        <div className="dv-submitted-col">
+                          <div className="dv-submitted-label">Normalized Text</div>
+                          <div className="dv-submitted-text">
+                            <DiffHighlight original={f.normalizedText || ""} modified={f.studentNormalizedText || ""} />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
+                  ))}
+                </div>
+              )}
+            </>
+          )}
 
-          {/* ── Available ── */}
           {tab === "available" && (
             <div>
               <div className="dv-toolbar">
                 <input
                   className="dv-search"
-                  placeholder="Search filename or text…"
+                  placeholder="Search…"
                   value={avSearch}
                   onChange={(e) => handleAvSearch(e.target.value)}
                 />
@@ -910,17 +900,15 @@ export default function DataValidationPage() {
                     onClick={handleAssign}
                     disabled={assigning}
                   >
-                    {assigning ? "Assigning…" : `Assign ${selected.length} file(s)`}
+                    {assigning ? "Assigning…" : `Assign ${selected.length}`}
                   </button>
                 )}
               </div>
 
               {selected.length > 0 && (
                 <div className="dv-assign-bar">
-                  <span>{selected.length} selected (max 10)</span>
-                  <button className="dv-btn" onClick={() => setSelected([])}>
-                    Clear
-                  </button>
+                  <span>{selected.length}/10 selected</span>
+                  <button className="dv-btn" onClick={() => setSelected([])}>Clear</button>
                 </div>
               )}
 
