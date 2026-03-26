@@ -24,7 +24,6 @@ function diffWords(original, modified) {
   const origWords = original.split(/(\s+)/);
   const modWords = modified.split(/(\s+)/);
 
-  // Simple algorithm: if lengths differ significantly, mark modified text as added
   if (Math.abs(origWords.length - modWords.length) > 5) {
     return [
       ...origWords.map(w => ({ type: 'removed', text: w })),
@@ -32,7 +31,6 @@ function diffWords(original, modified) {
     ];
   }
 
-  // Word-by-word comparison
   const result = [];
   const maxLen = Math.max(origWords.length, modWords.length);
 
@@ -93,30 +91,92 @@ function DiffHighlight({ original, modified }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// AUDIO PLAYER
+// AUDIO PLAYER WITH LAZY LOADING & PREVIEW UPGRADE
 // ─────────────────────────────────────────────────────────────────
 
-function AudioPlayer({ fileId }) {
-  const audioRef                = useRef(null);
-  const [blobUrl,  setBlobUrl]  = useState(null);
-  const [playing,  setPlaying]  = useState(false);
+function AudioPlayer({ fileId, usePreview = true }) {
+  const audioRef = useRef(null);
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [isPreview, setIsPreview] = useState(usePreview);
+  const [previewReady, setPreviewReady] = useState(false);
+  const pollIntervalRef = useRef(null);
 
+  // ✅ Load preview on mount, then poll for full quality
   useEffect(() => {
     let objectUrl = null;
     setLoading(true);
     setError("");
 
-    api.get(`/api/audio/${fileId}/stream`, { responseType: "blob" })
-      .then((res) => { objectUrl = URL.createObjectURL(res.data); setBlobUrl(objectUrl); })
-      .catch(() => setError("Audio unavailable"))
-      .finally(() => setLoading(false));
+    const loadAudio = async () => {
+      try {
+        // Start with preview (fast)
+        const previewUrl = usePreview ? `/api/audio/${fileId}/stream-preview` : `/api/audio/${fileId}/stream`;
+        const res = await api.get(previewUrl, { responseType: "blob" });
+        objectUrl = URL.createObjectURL(res.data);
+        setBlobUrl(objectUrl);
+        setIsPreview(usePreview);
+        setLoading(false);
 
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [fileId]);
+        // ✅ Poll for full-quality preview every 2 seconds
+        if (usePreview) {
+          pollIntervalRef.current = setInterval(async () => {
+            try {
+              const status = await api.get(`/api/audio/${fileId}/preview-status`);
+              if (status.data.previewReady) {
+                setPreviewReady(true);
+                clearInterval(pollIntervalRef.current);
+              }
+            } catch (e) {
+              // Silent fail
+            }
+          }, 2000);
+        }
+      } catch (e) {
+        setError("Audio unavailable");
+        setLoading(false);
+      }
+    };
+
+    loadAudio();
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [fileId, usePreview]);
+
+  // ✅ Upgrade to full quality when preview is ready
+  useEffect(() => {
+    if (!previewReady || !isPreview) return;
+
+    let objectUrl = null;
+    api.get(`/api/audio/${fileId}/stream`, { responseType: "blob" })
+      .then((res) => {
+        objectUrl = URL.createObjectURL(res.data);
+        const currentTime = audioRef.current?.currentTime || 0;
+
+        setBlobUrl(objectUrl);
+        setIsPreview(false);
+
+        // Resume playback at same timestamp
+        setTimeout(() => {
+          if (audioRef.current) {
+            audioRef.current.currentTime = currentTime;
+            if (playing) audioRef.current.play();
+          }
+        }, 100);
+      })
+      .catch(() => console.warn("[audio] Failed to upgrade to full quality"));
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [previewReady, fileId, isPreview, playing]);
 
   const toggle = () => {
     const a = audioRef.current;
@@ -127,7 +187,7 @@ function AudioPlayer({ fileId }) {
 
   const seek = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const a    = audioRef.current;
+    const a = audioRef.current;
     if (a?.duration) a.currentTime = ((e.clientX - rect.left) / rect.width) * a.duration;
   };
 
@@ -136,8 +196,17 @@ function AudioPlayer({ fileId }) {
     return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
   };
 
-  if (loading) return <div className="dv-player"><span className="dv-time">Loading audio…</span></div>;
-  if (error)   return <div className="dv-player"><span className="dv-time dv-time-err">{error}</span></div>;
+  if (loading) return (
+    <div className="dv-player">
+      <span className="dv-time">Loading audio…</span>
+    </div>
+  );
+
+  if (error) return (
+    <div className="dv-player">
+      <span className="dv-time dv-time-err">{error}</span>
+    </div>
+  );
 
   return (
     <div className="dv-player">
@@ -152,21 +221,29 @@ function AudioPlayer({ fileId }) {
         onEnded={() => setPlaying(false)}
         preload="metadata"
       />
+
       <button className="dv-play-btn" onClick={toggle} disabled={!blobUrl}>
         {playing ? "⏸" : "▶"}
       </button>
+
       <div className="dv-track" onClick={seek}>
         <div className="dv-track-fill" style={{ width: `${progress}%` }} />
       </div>
+
       <span className="dv-time">
         {fmtTime(audioRef.current?.currentTime)} / {fmtTime(duration)}
+      </span>
+
+      {/* ✅ Show quality indicator */}
+      <span className="dv-quality" title={isPreview ? "Loading full quality..." : "Full quality"}>
+        {isPreview ? "🔶 Preview" : "🔵 HD"}
       </span>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ADMIN REVIEW CARD (WITH DIFF)
+// ADMIN REVIEW CARD
 // ─────────────────────────────────────────────────────────────────
 
 function AdminReviewCard({ file, onVerdict, isVerdicting }) {
@@ -175,8 +252,6 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
 
   return (
     <div className="dv-review-card">
-
-      {/* card header */}
       <div className="dv-review-head">
         <div className="dv-review-headleft">
           <span className="dv-id">#{shortId(file._id)}</span>
@@ -188,14 +263,11 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
         </div>
       </div>
 
-      {/* audio */}
       <div className="dv-review-audio">
         <AudioPlayer fileId={file._id} />
       </div>
 
-      {/* text comparison with DIFF */}
       <div className="dv-review-cols">
-
         <div className="dv-review-col">
           <div className="dv-review-col-head">
             <span className="dv-review-col-label">Raw Text</span>
@@ -239,10 +311,8 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
             </div>
           </div>
         </div>
-
       </div>
 
-      {/* verdict footer */}
       <div className="dv-review-footer">
         <input
           className="dv-note-input"
@@ -267,7 +337,6 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
           </button>
         </div>
       </div>
-
     </div>
   );
 }
@@ -277,16 +346,13 @@ function AdminReviewCard({ file, onVerdict, isVerdicting }) {
 // ─────────────────────────────────────────────────────────────────
 
 function FileCard({ file, onSubmit, isSubmitting }) {
-  const [rawText,        setRawText]        = useState(file.studentRawText        || file.rawText        || "");
+  const [rawText, setRawText] = useState(file.studentRawText || file.rawText || "");
   const [normalizedText, setNormalizedText] = useState(file.studentNormalizedText || file.normalizedText || "");
   const isSubmitted = file.status === "submitted";
-
-  // Only show countdown for assigned (in-progress) files — not submitted
   const showCountdown = file.status === "assigned" && file.expiresIn > 0;
 
   return (
     <div className={`dv-card ${isSubmitted ? "dv-card-submitted" : ""}`}>
-
       <div className="dv-card-head">
         <div className="dv-card-meta">
           <div className="dv-card-title-row">
@@ -298,7 +364,6 @@ function FileCard({ file, onSubmit, isSubmitting }) {
           </span>
         </div>
         <div className="dv-card-right">
-          {/* countdown only shows when assigned, never when submitted */}
           {showCountdown && (
             <span className={`dv-countdown ${file.expiresIn < 3_600_000 ? "dv-countdown-warn" : ""}`}>
               {fmtCountdown(file.expiresIn)}
@@ -375,33 +440,33 @@ function AvailableRow({ file, selected, onToggle }) {
 
 export default function DataValidationPage() {
   const { user } = useAuth();
-  const isAdmin  = user?.role === "admin";
+  const isAdmin = user?.role === "admin";
 
   // ── student state ──
-  const [tab,        setTab]        = useState("inprogress");
-  const [myFiles,    setMyFiles]    = useState([]);
-  const [available,  setAvailable]  = useState([]);
-  const [avTotal,    setAvTotal]    = useState(0);
-  const [avSearch,   setAvSearch]   = useState("");
-  const [selected,   setSelected]   = useState([]);
+  const [tab, setTab] = useState("inprogress");
+  const [myFiles, setMyFiles] = useState([]);
+  const [available, setAvailable] = useState([]);
+  const [avTotal, setAvTotal] = useState(0);
+  const [avSearch, setAvSearch] = useState("");
+  const [selected, setSelected] = useState([]);
   const [submitting, setSubmitting] = useState(null);
-  const [assigning,  setAssigning]  = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
   // ── admin state ──
-  const [adminFiles,  setAdminFiles]  = useState([]);
-  const [adminTotal,  setAdminTotal]  = useState(0);
-  const [adminPage,   setAdminPage]   = useState(1);
+  const [adminFiles, setAdminFiles] = useState([]);
+  const [adminTotal, setAdminTotal] = useState(0);
+  const [adminPage, setAdminPage] = useState(1);
   const [adminStatus, setAdminStatus] = useState("submitted");
   const [adminSearch, setAdminSearch] = useState("");
-  const [verdicting,  setVerdicting]  = useState(null);
-  const [stats,       setStats]       = useState(null);
+  const [verdicting, setVerdicting] = useState(null);
+  const [stats, setStats] = useState(null);
 
   // ── shared ──
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
+  const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const LIMIT      = 20;
+  const LIMIT = 20;
   const searchTimer = useRef(null);
 
   // ─────────────────────────────────────────────────────────────
@@ -422,7 +487,7 @@ export default function DataValidationPage() {
       setLoading(true);
       const res = await api.get("/api/audio/available", { params: { q: q || undefined, limit: 500 } });
       setAvailable(res.data.items || []);
-      setAvTotal(res.data.total   || 0);
+      setAvTotal(res.data.total || 0);
     } catch (e) {
       setError(e?.response?.data?.message || e.message);
     } finally {
@@ -454,9 +519,14 @@ export default function DataValidationPage() {
   };
 
   useEffect(() => {
-    if (isAdmin) { loadAdminFiles(1, "submitted"); loadStats(); }
-    else         { loadMyFiles(); loadAvailable(""); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (isAdmin) {
+      loadAdminFiles(1, "submitted");
+      loadStats();
+    } else {
+      loadMyFiles();
+      loadAvailable("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAvSearch = (val) => {
@@ -493,7 +563,7 @@ export default function DataValidationPage() {
       setSelected([]);
       await loadMyFiles();
       await loadAvailable(avSearch);
-      setTab("my");
+      setTab("inprogress");
     } catch (e) {
       setError(e?.response?.data?.message || e.message);
     } finally {
@@ -537,9 +607,11 @@ export default function DataValidationPage() {
   const handleExport = async (format) => {
     try {
       const res = await api.get(`/api/audio/export?format=${format}`, { responseType: "blob" });
-      const url  = URL.createObjectURL(res.data);
-      const a    = document.createElement("a");
-      a.href = url; a.download = `tts_dataset.${format}`; a.click();
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tts_dataset.${format}`;
+      a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
       setError("Export failed.");
@@ -554,17 +626,22 @@ export default function DataValidationPage() {
 
   return (
     <div className="dv">
+      {error && (
+        <div className="dv-alert dv-alert-error" onClick={() => setError("")}>
+          {error} <span className="dv-alert-close">×</span>
+        </div>
+      )}
+      {success && (
+        <div className="dv-alert dv-alert-success" onClick={() => setSuccess("")}>
+          {success} <span className="dv-alert-close">×</span>
+        </div>
+      )}
 
-      {error   && <div className="dv-alert dv-alert-error"   onClick={() => setError("")}>{error} <span className="dv-alert-close">×</span></div>}
-      {success && <div className="dv-alert dv-alert-success" onClick={() => setSuccess("")}>{success} <span className="dv-alert-close">×</span></div>}
-
-      {/* ══════════════════════════════════════════════════════
+      {/* ═══════════════════════════���══════════════════════════
           ADMIN VIEW
       ══════════════════════════════════════════════════════ */}
       {isAdmin && (
         <div>
-
-          {/* header */}
           <div className="dv-page-header">
             <div>
               <h2 className="dv-title">Data Validation</h2>
@@ -572,33 +649,36 @@ export default function DataValidationPage() {
             </div>
           </div>
 
-          {/* stats */}
           {stats && (
             <div className="dv-stats">
               {[
-                { label: "Total",     value: stats.total,     color: "#374151" },
+                { label: "Total", value: stats.total, color: "#374151" },
                 { label: "Available", value: stats.available, color: "#6b7280" },
-                { label: "Assigned",  value: stats.assigned,  color: "#2563eb" },
+                { label: "Assigned", value: stats.assigned, color: "#2563eb" },
                 { label: "Submitted", value: stats.submitted, color: "#d97706" },
-                { label: "Verified",  value: stats.verified,  color: "#16a34a" },
-                { label: "Rejected",  value: stats.rejected,  color: "#dc2626" },
+                { label: "Verified", value: stats.verified, color: "#16a34a" },
+                { label: "Rejected", value: stats.rejected, color: "#dc2626" },
               ].map((s) => (
                 <div className="dv-stat" key={s.label}>
                   <div className="dv-stat-label">{s.label}</div>
-                  <div className="dv-stat-value" style={{ color: s.color }}>{s.value}</div>
+                  <div className="dv-stat-value" style={{ color: s.color }}>
+                    {s.value}
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* toolbar */}
           <div className="dv-toolbar">
             <div className="dv-tabs" style={{ border: "none", marginBottom: 0, flex: 1 }}>
               {["submitted", "verified", "available", "assigned", "rejected"].map((s) => (
                 <button
                   key={s}
                   className={`dv-tab ${adminStatus === s ? "dv-tab-active" : ""}`}
-                  onClick={() => { setAdminStatus(s); loadAdminFiles(1, s, adminSearch); }}
+                  onClick={() => {
+                    setAdminStatus(s);
+                    loadAdminFiles(1, s, adminSearch);
+                  }}
                 >
                   {s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
@@ -612,13 +692,11 @@ export default function DataValidationPage() {
             />
           </div>
 
-          {/* review cards for submitted, table for others */}
           {loading ? (
             <div className="dv-loading">Loading…</div>
           ) : adminFiles.length === 0 ? (
             <div className="dv-empty">No files found.</div>
           ) : adminStatus === "submitted" ? (
-            // ── Card view for review ──
             <div className="dv-review-list">
               {adminFiles.map((f) => (
                 <AdminReviewCard
@@ -630,7 +708,6 @@ export default function DataValidationPage() {
               ))}
             </div>
           ) : (
-            // ── Table view for other statuses ──
             <div className="dv-table-wrap">
               <table className="dv-table">
                 <thead>
@@ -657,7 +734,9 @@ export default function DataValidationPage() {
                       <td className="dv-cell-text-full">
                         <DiffHighlight original={f.normalizedText || ""} modified={f.studentNormalizedText || ""} />
                       </td>
-                      <td><AudioPlayer fileId={f._id} /></td>
+                      <td>
+                        <AudioPlayer fileId={f._id} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -665,13 +744,34 @@ export default function DataValidationPage() {
             </div>
           )}
 
-          {/* pager */}
           <div className="dv-pager">
-            <button className="dv-btn" disabled={adminPage <= 1} onClick={() => loadAdminFiles(adminPage - 1, adminStatus, adminSearch)}>Prev</button>
-            <span className="dv-page-info">Page {adminPage} / {adminTotalPages} · {adminTotal} files</span>
-            <button className="dv-btn" disabled={adminPage >= adminTotalPages} onClick={() => loadAdminFiles(adminPage + 1, adminStatus, adminSearch)}>Next</button>
-          </div>
+            <button
+              className="dv-btn"
+              disabled={adminPage <= 1}
+              onClick={() => loadAdminFiles(adminPage - 1, adminStatus, adminSearch)}
+            >
+              Prev
+            </button>
+            <span className="dv-page-info">
+              Page {adminPage} / {adminTotalPages} · {adminTotal} files
+            </span>
+            <button
+              className="dv-btn"
+              disabled={adminPage >= adminTotalPages}
+              onClick={() => loadAdminFiles(adminPage + 1, adminStatus, adminSearch)}
+            >
+              Next
+            </button>
 
+            <div style={{ flex: 1 }} />
+
+            <button className="dv-btn" onClick={() => handleExport("json")}>
+              Export JSON
+            </button>
+            <button className="dv-btn" onClick={() => handleExport("csv")}>
+              Export CSV
+            </button>
+          </div>
         </div>
       )}
 
@@ -680,7 +780,6 @@ export default function DataValidationPage() {
       ══════════════════════════════════════════════════════ */}
       {!isAdmin && (
         <div>
-
           <div className="dv-page-header">
             <div>
               <h2 className="dv-title">Data Validation</h2>
@@ -688,42 +787,45 @@ export default function DataValidationPage() {
             </div>
           </div>
 
-          {/* 3 tabs */}
           <div className="dv-tabs">
             <button
               className={`dv-tab ${tab === "inprogress" ? "dv-tab-active" : ""}`}
               onClick={() => setTab("inprogress")}
             >
               In Progress
-              {myFiles.filter(f => f.status === "assigned").length > 0 && (
+              {myFiles.filter((f) => f.status === "assigned").length > 0 && (
                 <span className="dv-tab-count">
-                  {myFiles.filter(f => f.status === "assigned").length}
+                  {myFiles.filter((f) => f.status === "assigned").length}
                 </span>
               )}
             </button>
+
             <button
               className={`dv-tab ${tab === "submitted" ? "dv-tab-active" : ""}`}
               onClick={() => setTab("submitted")}
             >
               Submitted
-              {myFiles.filter(f => f.status === "submitted").length > 0 && (
+              {myFiles.filter((f) => f.status === "submitted").length > 0 && (
                 <span className="dv-tab-count">
-                  {myFiles.filter(f => f.status === "submitted").length}
+                  {myFiles.filter((f) => f.status === "submitted").length}
                 </span>
               )}
             </button>
+
             <button
               className={`dv-tab ${tab === "available" ? "dv-tab-active" : ""}`}
-              onClick={() => { setTab("available"); loadAvailable(avSearch); }}
+              onClick={() => {
+                setTab("available");
+                loadAvailable(avSearch);
+              }}
             >
-              Available
-              <span className="dv-tab-count">{avTotal}</span>
+              Available <span className="dv-tab-count">{avTotal}</span>
             </button>
           </div>
 
           {/* ── In Progress ── */}
           {tab === "inprogress" && (() => {
-            const inProgress = myFiles.filter(f => f.status === "assigned");
+            const inProgress = myFiles.filter((f) => f.status === "assigned");
             return inProgress.length === 0 ? (
               <div className="dv-empty">
                 No files in progress. Go to Available to pick some.
@@ -744,7 +846,7 @@ export default function DataValidationPage() {
 
           {/* ── Submitted — read-only view ── */}
           {tab === "submitted" && (() => {
-            const submitted = myFiles.filter(f => f.status === "submitted");
+            const submitted = myFiles.filter((f) => f.status === "submitted");
             return submitted.length === 0 ? (
               <div className="dv-empty">
                 No submitted files yet. Submit a file from In Progress to see it here.
@@ -757,11 +859,15 @@ export default function DataValidationPage() {
                       <div className="dv-submitted-headleft">
                         <span className="dv-filename">{f.filename}</span>
                         <span className="dv-id">#{shortId(f._id)}</span>
-                        <span className="dv-path">{f.movieFolder}{f.chapterFolder ? ` / ${f.chapterFolder}` : ""}</span>
+                        <span className="dv-path">
+                          {f.movieFolder}{f.chapterFolder ? ` / ${f.chapterFolder}` : ""}
+                        </span>
                       </div>
                       <span className="dv-badge-submitted">Submitted ✓</span>
                     </div>
+
                     <AudioPlayer fileId={f._id} />
+
                     <div className="dv-submitted-texts">
                       <div className="dv-submitted-col">
                         <div className="dv-submitted-label">Raw Text</div>
@@ -806,7 +912,9 @@ export default function DataValidationPage() {
               {selected.length > 0 && (
                 <div className="dv-assign-bar">
                   <span>{selected.length} selected (max 10)</span>
-                  <button className="dv-btn" onClick={() => setSelected([])}>Clear</button>
+                  <button className="dv-btn" onClick={() => setSelected([])}>
+                    Clear
+                  </button>
                 </div>
               )}
 
@@ -828,10 +936,8 @@ export default function DataValidationPage() {
               )}
             </div>
           )}
-
         </div>
       )}
-
     </div>
   );
 }
