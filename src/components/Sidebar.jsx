@@ -2,6 +2,7 @@ import { useAuth } from "../auth/AuthContext";
 
 const NAV_ADMIN = [
   { id: "overview",        label: "Overview"           },
+  { id: "validator",       label: "Validators"         },
   { id: "textnorm",        label: "Text Normalization" },
   { id: "parallelnorm",    label: "Parallel Norm"      },
   { id: "datavalidation",  label: "Data Validation"    },

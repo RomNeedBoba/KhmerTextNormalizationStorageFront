@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import "./OverviewPage.css";
 
 // ─────────────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ function HoursBar({ rank, name, email, hours, maxHours }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ─────────────────��───────────────────────────────────────────────
 // PAID TOGGLE BUTTON
 // ─────────────────────────────────────────────────────────────────
 
@@ -74,37 +75,56 @@ function PaidToggle({ email, paid, onToggle, loading }) {
 // ─────────────────────────────────────────────────────────────────
 
 export default function OverviewPage() {
-  const [data,       setData]       = useState(null);
-  const [audioStats, setAudioStats] = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState("");
-  const [payLoading, setPayLoading] = useState({}); // { email: bool }
+  const { token, user } = useAuth();
+  const [data,           setData]           = useState(null);
+  const [audioStats,     setAudioStats]     = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState("");
+  const [payLoading,     setPayLoading]     = useState({});
+  const [hoursMode,      setHoursMode]      = useState("verified");
 
   const load = async () => {
     setLoading(true);
     setError("");
+    
+    // Debug logging
+    console.log("🔍 Load called");
+    console.log("Token present:", !!token);
+    console.log("User:", user);
+    
     try {
-      const [overviewRes, audioRes] = await Promise.all([
+      const [overviewRes, audioRes, hoursRes] = await Promise.all([
         api.get("/api/overview"),
         api.get("/api/audio/stats"),
+        api.get("/api/audio/hours/by-verified"),
       ]);
-      setData(overviewRes.data);
+      
+      console.log("✅ Data loaded successfully");
+      setData({
+        ...overviewRes.data,
+        students: hoursRes.data.students,
+      });
       setAudioStats(audioRes.data);
     } catch (e) {
-      setError(e?.response?.data?.message || e.message || "Failed to load.");
+      const message = e?.response?.data?.message || e.message || "Failed to load.";
+      console.error("❌ Load error:", message, "Status:", e?.response?.status);
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    if (token) {
+      load();
+    }
+  }, [token]);
 
   // Toggle paid status for a student
   const handlePaid = async (email, paid) => {
     setPayLoading((prev) => ({ ...prev, [email]: true }));
     try {
       await api.patch(`/api/overview/pay/${encodeURIComponent(email)}`, { paid });
-      // Update local state without full reload
       setData((prev) => ({
         ...prev,
         students: prev.students.map((s) =>
@@ -115,6 +135,24 @@ export default function OverviewPage() {
       setError(e?.response?.data?.message || e.message);
     } finally {
       setPayLoading((prev) => ({ ...prev, [email]: false }));
+    }
+  };
+
+  // Load hours data based on mode
+  const loadHoursData = async (mode) => {
+    try {
+      const endpoint = mode === "submit" 
+        ? "/api/audio/hours/by-submit"
+        : "/api/audio/hours/by-verified";
+      
+      const res = await api.get(endpoint);
+      setData((prev) => ({
+        ...prev,
+        students: res.data.students,
+      }));
+      setHoursMode(mode);
+    } catch (e) {
+      setError(e?.response?.data?.message || e.message || "Failed to load hours data.");
     }
   };
 
@@ -141,10 +179,14 @@ export default function OverviewPage() {
 
   if (!data) return null;
 
-  const { totals, students } = data;
-  const maxHours  = Math.max(...students.map((s) => s.totalHours), 0.001);
-  const totalPay  = totals.totalHours * RATE_PER_HOUR;
-  const paidCount = students.filter((s) => s.paid).length;
+  const { students } = data;
+  const hoursStudents = students || [];
+  const maxHours = Math.max(...hoursStudents.map((s) => s.totalHours), 0.001);
+  
+  // Calculate totals from current hours data
+  const totalHours = hoursStudents.reduce((sum, s) => sum + s.totalHours, 0);
+  const totalPay = totalHours * RATE_PER_HOUR;
+  const paidCount = hoursStudents.filter((s) => s.paid).length;
 
   return (
     <div className="ov">
@@ -185,32 +227,53 @@ export default function OverviewPage() {
         />
         <StatCard
           label="Hours Completed"
-          value={fmtHours(totals.totalHours)}
+          value={fmtHours(totalHours)}
           sub="verified work only"
         />
         <StatCard
           label="Total Payout"
           value={`$${totalPay.toFixed(2)}`}
-          sub={`$${RATE_PER_HOUR}/hr · ${paidCount}/${students.length} paid`}
+          sub={`$${RATE_PER_HOUR}/hr · ${paidCount}/${hoursStudents.length} paid`}
         />
         <StatCard
           label="Students"
-          value={totals.students}
+          value={hoursStudents.length}
           sub="active annotators"
         />
       </div>
 
-      {/* ── Hours bar chart ── */}
+      {/* ── Hours bar chart with toggle ── */}
       <div className="ov-card">
         <div className="ov-card-head">
-          <div className="ov-card-title">Hours Worked per Student</div>
-          <div className="ov-card-sub">Verified tasks only · ranked by time</div>
+          <div className="ov-card-head-top">
+            <div>
+              <div className="ov-card-title">Hours Worked per Student</div>
+              <div className="ov-card-sub">Verified tasks only · ranked by {hoursMode === "submit" ? "submit time" : "verification time"}</div>
+            </div>
+          </div>
+          
+          {/* Toggle button for hours mode */}
+          <div className="ov-hours-toggle">
+            <button
+              className={`ov-toggle-btn ${hoursMode === "submit" ? "ov-toggle-active" : ""}`}
+              onClick={() => loadHoursData("submit")}
+            >
+              By Submit
+            </button>
+            <button
+              className={`ov-toggle-btn ${hoursMode === "verified" ? "ov-toggle-active" : ""}`}
+              onClick={() => loadHoursData("verified")}
+            >
+              By Verified
+            </button>
+          </div>
         </div>
+
         <div className="ov-card-body">
-          {students.length === 0 ? (
+          {hoursStudents.length === 0 ? (
             <div className="ov-empty">No student data yet.</div>
           ) : (
-            students.map((s, i) => (
+            hoursStudents.map((s, i) => (
               <HoursBar
                 key={s.email}
                 rank={i}
@@ -244,17 +307,17 @@ export default function OverviewPage() {
               </tr>
             </thead>
             <tbody>
-              {students.length === 0 ? (
+              {hoursStudents.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="ov-empty">No students yet.</td>
                 </tr>
               ) : (
-                students.map((s, i) => (
+                hoursStudents.map((s, i) => (
                   <tr key={s.email} className={s.paid ? "ov-row-paid" : ""}>
                     <td className="ov-td-rank">{i + 1}</td>
                     <td className="ov-td-email">{s.email}</td>
                     <td className="ov-td-name">{s.name}</td>
-                    <td className="ov-td-num">{s.verified}</td>
+                    <td className="ov-td-num">{s.verifiedCount || 0}</td>
                     <td className="ov-td-hours">{fmtHours(s.totalHours)}</td>
                     <td className="ov-td-pay">{fmtPay(s.totalHours)}</td>
                     <td>
@@ -269,11 +332,11 @@ export default function OverviewPage() {
                 ))
               )}
             </tbody>
-            {students.length > 0 && (
+            {hoursStudents.length > 0 && (
               <tfoot>
                 <tr className="ov-tfoot-row">
                   <td colSpan={4} className="ov-tfoot-label">Total</td>
-                  <td className="ov-td-hours">{fmtHours(totals.totalHours)}</td>
+                  <td className="ov-td-hours">{fmtHours(totalHours)}</td>
                   <td className="ov-td-pay ov-td-pay-total">${totalPay.toFixed(2)}</td>
                   <td></td>
                 </tr>

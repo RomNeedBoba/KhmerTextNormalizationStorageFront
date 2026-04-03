@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "./auth/AuthContext";
 import Sidebar from "./components/Sidebar";
 import OverviewPage       from "./pages/OverviewPage";
+import ValidatorPage      from "./pages/ValidatorPage";
 import TextNormPage       from "./pages/TextNormPage";
 import ParallelNormPage   from "./pages/ParallelNormPage";
 import DataValidationPage from "./pages/DataValidationPage";
@@ -20,6 +21,7 @@ export default function App() {
 
         {/* ── Admin only ── */}
         {isAdmin && active === "overview"     && <OverviewPage />}
+        {isAdmin && active === "validator"    && <ValidatorPage />}
         {isAdmin && active === "textnorm"     && <TextNormPage />}
         {isAdmin && active === "parallelnorm" && <ParallelNormPage />}
 

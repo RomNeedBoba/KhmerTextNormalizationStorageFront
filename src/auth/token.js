@@ -1,13 +1,13 @@
-const KEY = "textnorm_token";
-
 export function getToken() {
-  return localStorage.getItem(KEY) || "";
+  return localStorage.getItem("token") || "";
 }
 
 export function setToken(token) {
-  localStorage.setItem(KEY, token);
+  if (token) {
+    localStorage.setItem("token", token);
+  }
 }
 
 export function clearToken() {
-  localStorage.removeItem(KEY);
+  localStorage.removeItem("token");
 }

@@ -14,7 +14,34 @@ const SEARCH_DEBOUNCE = 300;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // ─────────────────────────────────────────────────────────────────
-// CACHE LAYER
+// AUDIO LOADING QUEUE (Prevent concurrent request overload)
+// ─────────────────────────────────────────────────────────────────
+
+class AudioLoadQueue {
+  constructor(maxConcurrent = 3) {
+    this.maxConcurrent = maxConcurrent;
+    this.activeCount = 0;
+  }
+
+  async load(_fileId, loaderFn) {
+    while (this.activeCount >= this.maxConcurrent) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    this.activeCount++;
+    try {
+      return await loaderFn();
+    } finally {
+      this.activeCount--;
+    }
+  }
+}
+
+const audioLoadQueue = new AudioLoadQueue(3);
+
+// ─────────────────────────────────────────────────────────────────
+// CACHE LAYER (revokes blob URLs when expiring / clearing)
 // ─────────────────────────────────────────────────────────────────
 
 class CacheManager {
@@ -32,20 +59,48 @@ class CacheManager {
   get(key) {
     const item = this.cache.get(key);
     if (!item) return null;
+
     if (Date.now() - item.timestamp > CACHE_TTL) {
+      // revoke blob url if stored
+      if (typeof item.data === "string" && item.data.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(item.data);
+        } catch {
+          // ignore
+        }
+      }
       this.cache.delete(key);
       return null;
     }
+
     return item.data;
   }
 
   clear() {
+    // revoke all blob urls before clearing
+    for (const item of this.cache.values()) {
+      if (typeof item.data === "string" && item.data.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(item.data);
+        } catch {
+          // ignore
+        }
+      }
+    }
     this.cache.clear();
   }
 
   invalidate(pattern) {
     for (const key of this.cache.keys()) {
       if (key.includes(pattern)) {
+        const item = this.cache.get(key);
+        if (item && typeof item.data === "string" && item.data.startsWith("blob:")) {
+          try {
+            URL.revokeObjectURL(item.data);
+          } catch {
+            // ignore
+          }
+        }
         this.cache.delete(key);
       }
     }
@@ -68,13 +123,13 @@ const fmtCountdown = (ms) => {
 const shortId = (id) => String(id).slice(-6).toUpperCase();
 
 function diffWords(original, modified) {
-  const origWords = original.split(/(\s+)/);
-  const modWords = modified.split(/(\s+)/);
+  const origWords = String(original || "").split(/(\s+)/);
+  const modWords = String(modified || "").split(/(\s+)/);
 
   if (Math.abs(origWords.length - modWords.length) > 5) {
     return [
-      ...origWords.map(w => ({ type: 'removed', text: w })),
-      ...modWords.map(w => ({ type: 'added', text: w }))
+      ...origWords.map((w) => ({ type: "removed", text: w })),
+      ...modWords.map((w) => ({ type: "added", text: w })),
     ];
   }
 
@@ -82,18 +137,15 @@ function diffWords(original, modified) {
   const maxLen = Math.max(origWords.length, modWords.length);
 
   for (let i = 0; i < maxLen; i++) {
-    const orig = origWords[i] || '';
-    const mod = modWords[i] || '';
+    const orig = origWords[i] || "";
+    const mod = modWords[i] || "";
 
-    if (orig === mod) {
-      result.push({ type: 'same', text: orig });
-    } else if (!orig) {
-      result.push({ type: 'added', text: mod });
-    } else if (!mod) {
-      result.push({ type: 'removed', text: orig });
-    } else {
-      result.push({ type: 'removed', text: orig });
-      result.push({ type: 'added', text: mod });
+    if (orig === mod) result.push({ type: "same", text: orig });
+    else if (!orig) result.push({ type: "added", text: mod });
+    else if (!mod) result.push({ type: "removed", text: orig });
+    else {
+      result.push({ type: "removed", text: orig });
+      result.push({ type: "added", text: mod });
     }
   }
 
@@ -101,41 +153,35 @@ function diffWords(original, modified) {
 }
 
 const DiffHighlight = memo(function DiffHighlight({ original, modified }) {
-  if (!original || !modified) {
-    return <span>{modified || original}</span>;
-  }
-
-  if (original === modified) {
-    return <span>{original}</span>;
-  }
+  if (!original || !modified) return <span>{modified || original}</span>;
+  if (original === modified) return <span>{original}</span>;
 
   const diff = useMemo(() => diffWords(original, modified), [original, modified]);
 
   return (
     <span>
       {diff.map((segment, idx) => {
-        if (segment.type === 'same') {
-          return <span key={idx}>{segment.text}</span>;
-        } else if (segment.type === 'added') {
+        if (segment.type === "same") return <span key={idx}>{segment.text}</span>;
+        if (segment.type === "added") {
           return (
             <span key={idx} className="dv-diff-added">
               {segment.text}
             </span>
           );
-        } else {
-          return (
-            <span key={idx} className="dv-diff-removed">
-              {segment.text}
-            </span>
-          );
         }
+        return (
+          <span key={idx} className="dv-diff-removed">
+            {segment.text}
+          </span>
+        );
       })}
     </span>
   );
 });
 
 // ─────────────────────────────────────────────────────────────────
-// AUDIO PLAYER (Memoized)
+// AUDIO PLAYER (Memoized with Loading Queue)
+// FIXED: do not revoke cached blob URL on unmount
 // ─────────────────────────────────────────────────────────────────
 
 const AudioPlayer = memo(function AudioPlayer({ fileId }) {
@@ -148,46 +194,61 @@ const AudioPlayer = memo(function AudioPlayer({ fileId }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let objectUrl = null;
     setLoading(true);
     setError("");
 
-    // Check cache first
     const cached = cacheManager.get(`audio_${fileId}`);
     if (cached) {
       setBlobUrl(cached);
       setLoading(false);
-      return;
+      return undefined;
     }
+
+    let didCancel = false;
 
     const loadAudio = async () => {
       try {
-        const res = await api.get(`/api/audio/${fileId}/stream`, { 
-          responseType: "blob",
-          timeout: 30000, // 30s timeout
+        await audioLoadQueue.load(fileId, async () => {
+          const res = await api.get(`/api/audio/${fileId}/stream`, {
+            responseType: "blob",
+            timeout: 60000,
+          });
+
+          if (didCancel) return;
+
+          if (!res.data || res.data.size === 0) {
+            setError("Empty audio response");
+            return;
+          }
+
+          const objectUrl = URL.createObjectURL(res.data);
+          setBlobUrl(objectUrl);
+          cacheManager.set(`audio_${fileId}`, objectUrl);
         });
-        objectUrl = URL.createObjectURL(res.data);
-        setBlobUrl(objectUrl);
-        cacheManager.set(`audio_${fileId}`, objectUrl);
-        setLoading(false);
-      } catch (e) {
-        setError("Audio unavailable");
-        setLoading(false);
+
+        if (!didCancel) setLoading(false);
+      } catch {
+        if (!didCancel) {
+          setError("Audio unavailable");
+          setLoading(false);
+        }
       }
     };
 
     loadAudio();
 
+    // IMPORTANT: do not revoke blob URL here; it is cached.
     return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      didCancel = true;
     };
   }, [fileId]);
 
   const toggle = useCallback(() => {
     const a = audioRef.current;
     if (!a || !blobUrl) return;
-    playing ? a.pause() : a.play();
-    setPlaying(!playing);
+    if (playing) a.pause();
+    else a.play();
+    setPlaying((p) => !p);
   }, [playing, blobUrl]);
 
   const seek = useCallback((e) => {
@@ -199,18 +260,31 @@ const AudioPlayer = memo(function AudioPlayer({ fileId }) {
   }, []);
 
   const fmtTime = useCallback((s) => {
-    if (!s || isNaN(s)) return "0:00";
+    if (!s || Number.isNaN(s)) return "0:00";
     return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
   }, []);
 
-  if (loading) return <div className="dv-player"><span className="dv-time">Loading…</span></div>;
-  if (error) return <div className="dv-player"><span className="dv-time dv-time-err">{error}</span></div>;
+  if (loading) {
+    return (
+      <div className="dv-player">
+        <span className="dv-time">Loading...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="dv-player">
+        <span className="dv-time dv-time-err">{error}</span>
+      </div>
+    );
+  }
 
   return (
     <div className="dv-player">
       <audio
         ref={audioRef}
-        src={blobUrl}
+        src={blobUrl || undefined}
         onTimeUpdate={() => {
           const a = audioRef.current;
           if (a?.duration) setProgress((a.currentTime / a.duration) * 100);
@@ -221,7 +295,7 @@ const AudioPlayer = memo(function AudioPlayer({ fileId }) {
       />
 
       <button className="dv-play-btn" onClick={toggle} disabled={!blobUrl}>
-        {playing ? "⏸" : "▶"}
+        {playing ? "Pause" : "Play"}
       </button>
 
       <div className="dv-track" onClick={seek}>
@@ -237,14 +311,25 @@ const AudioPlayer = memo(function AudioPlayer({ fileId }) {
 
 // ─────────────────────────────────────────────────────────────────
 // ADMIN REVIEW CARD (Memoized)
+// - Admin can edit final text before Accept
 // ─────────────────────────────────────────────────────────────────
 
 const AdminReviewCard = memo(function AdminReviewCard({ file, onVerdict, isVerdicting }) {
   const [note, setNote] = useState("");
   const studentName = file.studentName || file.assignedTo || "Unknown";
 
-  const handleAccept = useCallback(() => onVerdict(file._id, "verified", note), [file._id, note, onVerdict]);
-  const handleReject = useCallback(() => onVerdict(file._id, "rejected", note), [file._id, note, onVerdict]);
+  const [editing, setEditing] = useState(false);
+  const [finalRaw, setFinalRaw] = useState(file.studentRawText || "");
+  const [finalNorm, setFinalNorm] = useState(file.studentNormalizedText || "");
+
+  useEffect(() => {
+    setEditing(false);
+    setFinalRaw(file.studentRawText || "");
+    setFinalNorm(file.studentNormalizedText || "");
+    setNote("");
+  }, [file._id]);
+
+  const acceptDisabled = isVerdicting || !finalRaw.trim() || !finalNorm.trim();
 
   return (
     <div className="dv-review-card">
@@ -254,8 +339,17 @@ const AdminReviewCard = memo(function AdminReviewCard({ file, onVerdict, isVerdi
           <span className="dv-review-filename">{file.filename}</span>
           <span className="dv-review-folder">{file.movieFolder}</span>
         </div>
+
         <div className="dv-review-headright">
           <span className="dv-review-student">by {studentName}</span>
+          <button
+            type="button"
+            className="dv-icon-btn"
+            onClick={() => setEditing((v) => !v)}
+            disabled={isVerdicting}
+          >
+            {editing ? "Close" : "Edit"}
+          </button>
         </div>
       </div>
 
@@ -268,21 +362,32 @@ const AdminReviewCard = memo(function AdminReviewCard({ file, onVerdict, isVerdi
           <div className="dv-review-col-head">
             <span className="dv-review-col-label">Raw Text</span>
           </div>
+
           <div className="dv-review-col-section">
             <div className="dv-review-col-sublabel">Original</div>
             <div className="dv-review-text dv-review-text-original">
               {file.rawText || <em className="dv-no-text">No text</em>}
             </div>
           </div>
+
           <div className="dv-review-col-section">
-            <div className="dv-review-col-sublabel">Correction</div>
-            <div className={`dv-review-text ${file.studentRawText ? "dv-review-text-student" : "dv-review-text-empty"}`}>
-              {file.studentRawText ? (
-                <DiffHighlight original={file.rawText || ""} modified={file.studentRawText} />
-              ) : (
-                <em className="dv-no-text">No correction</em>
-              )}
-            </div>
+            <div className="dv-review-col-sublabel">Final</div>
+            {!editing ? (
+              <div className="dv-review-text dv-review-text-student">
+                {finalRaw ? (
+                  <DiffHighlight original={file.rawText || ""} modified={finalRaw} />
+                ) : (
+                  <em className="dv-no-text">No text</em>
+                )}
+              </div>
+            ) : (
+              <textarea
+                className="dv-admin-edit"
+                value={finalRaw}
+                onChange={(e) => setFinalRaw(e.target.value)}
+                rows={4}
+              />
+            )}
           </div>
         </div>
 
@@ -290,21 +395,32 @@ const AdminReviewCard = memo(function AdminReviewCard({ file, onVerdict, isVerdi
           <div className="dv-review-col-head">
             <span className="dv-review-col-label">Normalized Text</span>
           </div>
+
           <div className="dv-review-col-section">
             <div className="dv-review-col-sublabel">Original</div>
             <div className="dv-review-text dv-review-text-original">
               {file.normalizedText || <em className="dv-no-text">No text</em>}
             </div>
           </div>
+
           <div className="dv-review-col-section">
-            <div className="dv-review-col-sublabel">Correction</div>
-            <div className={`dv-review-text ${file.studentNormalizedText ? "dv-review-text-student" : "dv-review-text-empty"}`}>
-              {file.studentNormalizedText ? (
-                <DiffHighlight original={file.normalizedText || ""} modified={file.studentNormalizedText} />
-              ) : (
-                <em className="dv-no-text">No correction</em>
-              )}
-            </div>
+            <div className="dv-review-col-sublabel">Final</div>
+            {!editing ? (
+              <div className="dv-review-text dv-review-text-student">
+                {finalNorm ? (
+                  <DiffHighlight original={file.normalizedText || ""} modified={finalNorm} />
+                ) : (
+                  <em className="dv-no-text">No text</em>
+                )}
+              </div>
+            ) : (
+              <textarea
+                className="dv-admin-edit"
+                value={finalNorm}
+                onChange={(e) => setFinalNorm(e.target.value)}
+                rows={4}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -312,24 +428,31 @@ const AdminReviewCard = memo(function AdminReviewCard({ file, onVerdict, isVerdi
       <div className="dv-review-footer">
         <input
           className="dv-note-input"
-          placeholder="Admin note…"
+          placeholder="Admin note..."
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
+
         <div className="dv-verdict-btns">
           <button
             className="dv-btn dv-btn-accept"
-            disabled={isVerdicting}
-            onClick={handleAccept}
+            disabled={acceptDisabled}
+            onClick={() =>
+              onVerdict(file._id, "verified", note, {
+                finalRawText: finalRaw,
+                finalNormalizedText: finalNorm,
+              })
+            }
           >
-            ✓ Accept
+            Accept
           </button>
+
           <button
             className="dv-btn dv-btn-reject"
             disabled={isVerdicting}
-            onClick={handleReject}
+            onClick={() => onVerdict(file._id, "rejected", note)}
           >
-            ✗ Reject
+            Reject
           </button>
         </div>
       </div>
@@ -343,7 +466,10 @@ const AdminReviewCard = memo(function AdminReviewCard({ file, onVerdict, isVerdi
 
 const FileCard = memo(function FileCard({ file, onSubmit, isSubmitting }) {
   const [rawText, setRawText] = useState(file.studentRawText || file.rawText || "");
-  const [normalizedText, setNormalizedText] = useState(file.studentNormalizedText || file.normalizedText || "");
+  const [normalizedText, setNormalizedText] = useState(
+    file.studentNormalizedText || file.normalizedText || ""
+  );
+
   const isSubmitted = file.status === "submitted";
   const showCountdown = file.status === "assigned" && file.expiresIn > 0;
   const canSubmit = !isSubmitting && rawText.trim() && normalizedText.trim();
@@ -361,16 +487,18 @@ const FileCard = memo(function FileCard({ file, onSubmit, isSubmitting }) {
             <span className="dv-id">#{shortId(file._id)}</span>
           </div>
           <span className="dv-path">
-            {file.movieFolder}{file.chapterFolder ? ` / ${file.chapterFolder}` : ""}
+            {file.movieFolder}
+            {file.chapterFolder ? ` / ${file.chapterFolder}` : ""}
           </span>
         </div>
+
         <div className="dv-card-right">
           {showCountdown && (
             <span className={`dv-countdown ${file.expiresIn < 3_600_000 ? "dv-countdown-warn" : ""}`}>
               {fmtCountdown(file.expiresIn)}
             </span>
           )}
-          {isSubmitted && <span className="dv-badge-submitted">Submitted ✓</span>}
+          {isSubmitted && <span className="dv-badge-submitted">Submitted</span>}
         </div>
       </div>
 
@@ -384,9 +512,10 @@ const FileCard = memo(function FileCard({ file, onSubmit, isSubmitting }) {
             onChange={(e) => setRawText(e.target.value)}
             rows={3}
             disabled={isSubmitted}
-            placeholder="Raw text…"
+            placeholder="Raw text..."
           />
         </div>
+
         <div className="dv-field">
           <label>Normalized Text</label>
           <textarea
@@ -394,19 +523,15 @@ const FileCard = memo(function FileCard({ file, onSubmit, isSubmitting }) {
             onChange={(e) => setNormalizedText(e.target.value)}
             rows={3}
             disabled={isSubmitted}
-            placeholder="Normalized text…"
+            placeholder="Normalized text..."
           />
         </div>
       </div>
 
       {!isSubmitted && (
         <div className="dv-card-footer">
-          <button
-            className="dv-submit-btn"
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-          >
-            {isSubmitting ? "Submitting…" : "✓ Submit"}
+          <button className="dv-submit-btn" onClick={handleSubmit} disabled={!canSubmit}>
+            {isSubmitting ? "Submitting..." : "Submit"}
           </button>
         </div>
       )}
@@ -423,11 +548,14 @@ const AvailableRow = memo(function AvailableRow({ file, selected, onToggle }) {
 
   return (
     <div className={`dv-row ${selected ? "dv-row-selected" : ""}`} onClick={handleClick}>
-      <div className="dv-row-check">{selected ? "☑" : "☐"}</div>
+      <div className="dv-row-check">{selected ? "On" : "Off"}</div>
       <div className="dv-row-id">#{shortId(file._id)}</div>
       <div className="dv-row-info">
         <span className="dv-filename">{file.filename}</span>
-        <span className="dv-path">{file.movieFolder}{file.chapterFolder ? ` / ${file.chapterFolder}` : ""}</span>
+        <span className="dv-path">
+          {file.movieFolder}
+          {file.chapterFolder ? ` / ${file.chapterFolder}` : ""}
+        </span>
       </div>
       <div className="dv-row-text">{file.rawText || <em>No text</em>}</div>
     </div>
@@ -469,7 +597,7 @@ export default function DataValidationPage() {
   const searchTimer = useRef(null);
 
   // ─────────────────────────────────────────────────────────────
-  // MEMOIZED LOADERS
+  // LOADERS
   // ─────────────────────────────────────────────────────────────
 
   const loadMyFiles = useCallback(async () => {
@@ -479,6 +607,7 @@ export default function DataValidationPage() {
         setMyFiles(cached);
         return;
       }
+
       const res = await api.get("/api/audio/my", { timeout: 10000 });
       const files = res.data.files || [];
       cacheManager.set("myFiles", files);
@@ -503,8 +632,10 @@ export default function DataValidationPage() {
         params: { q: q || undefined, limit: 500 },
         timeout: 15000,
       });
+
       const data = { items: res.data.items || [], total: res.data.total || 0 };
       cacheManager.set(cacheKey, data);
+
       setAvailable(data.items);
       setAvTotal(data.total);
     } catch (e) {
@@ -530,8 +661,10 @@ export default function DataValidationPage() {
         params: { page, limit: LIMIT, status, q: q || undefined },
         timeout: 15000,
       });
+
       const data = { items: res.data.items || [], total: res.data.total || 0 };
       cacheManager.set(cacheKey, data);
+
       setAdminFiles(data.items);
       setAdminTotal(data.total);
       setAdminPage(page);
@@ -549,16 +682,17 @@ export default function DataValidationPage() {
         setStats(cached);
         return;
       }
+
       const res = await api.get("/api/audio/stats", { timeout: 10000 });
       cacheManager.set("stats", res.data);
       setStats(res.data);
-    } catch (e) {
-      console.error("Failed to load stats:", e.message);
+    } catch {
+      // ignore
     }
   }, []);
 
   // ─────────────────────────────────────────────────────────────
-  // INITIALIZATION
+  // INIT
   // ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -569,35 +703,44 @@ export default function DataValidationPage() {
       loadMyFiles();
       loadAvailable("");
     }
-  }, [isAdmin, loadAdminFiles, loadMyFiles, loadAvailable, loadStats]);
+  }, [isAdmin, loadAdminFiles, loadStats, loadMyFiles, loadAvailable]);
 
   // ─────────────────────────────────────────────────────────────
-  // SEARCH HANDLERS (Debounced)
+  // SEARCH (Debounced)
   // ─────────────────────────────────────────────────────────────
 
-  const handleAvSearch = useCallback((val) => {
-    setAvSearch(val);
-    clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => {
-      cacheManager.invalidate("available_");
-      loadAvailable(val);
-    }, SEARCH_DEBOUNCE);
-  }, [loadAvailable]);
+  const handleAvSearch = useCallback(
+    (val) => {
+      setAvSearch(val);
+      clearTimeout(searchTimer.current);
+      searchTimer.current = setTimeout(() => {
+        cacheManager.invalidate("available_");
+        loadAvailable(val);
+      }, SEARCH_DEBOUNCE);
+    },
+    [loadAvailable]
+  );
 
-  const handleAdminSearch = useCallback((val) => {
-    setAdminSearch(val);
-    clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => {
+  const handleAdminSearch = useCallback(
+    (val) => {
+      setAdminSearch(val);
+      clearTimeout(searchTimer.current);
+      searchTimer.current = setTimeout(() => {
+        cacheManager.invalidate("admin_");
+        loadAdminFiles(1, adminStatus, val);
+      }, SEARCH_DEBOUNCE);
+    },
+    [loadAdminFiles, adminStatus]
+  );
+
+  const handleStatusChange = useCallback(
+    (newStatus) => {
+      setAdminStatus(newStatus);
       cacheManager.invalidate("admin_");
-      loadAdminFiles(1, adminStatus, val);
-    }, SEARCH_DEBOUNCE);
-  }, [loadAdminFiles, adminStatus]);
-
-  const handleStatusChange = useCallback((newStatus) => {
-    setAdminStatus(newStatus);
-    cacheManager.invalidate("admin_");
-    loadAdminFiles(1, newStatus, adminSearch);
-  }, [loadAdminFiles, adminSearch]);
+      loadAdminFiles(1, newStatus, adminSearch);
+    },
+    [loadAdminFiles, adminSearch]
+  );
 
   // ─────────────────────────────────────────────────────────────
   // STUDENT ACTIONS
@@ -605,9 +748,7 @@ export default function DataValidationPage() {
 
   const toggleSelect = useCallback((id) => {
     setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id)
-        : prev.length >= MAX_PER_DAY ? prev
-        : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= MAX_PER_DAY ? prev : [...prev, id]
     );
   }, []);
 
@@ -649,76 +790,73 @@ export default function DataValidationPage() {
     }
   }, [selected, available, myFiles, avTotal]);
 
-  const handleSubmit = useCallback(async (fileId, payload) => {
-    const originalFiles = myFiles;
+  const handleSubmit = useCallback(
+    async (fileId, payload) => {
+      const originalFiles = myFiles;
 
-    setMyFiles((prev) =>
-      prev.map((f) =>
-        f._id === fileId
-          ? {
-              ...f,
-              status: "submitted",
-              ...payload,
-              submittedAt: new Date(),
-            }
-          : f
-      )
-    );
-    setSubmitting(fileId);
-    setError("");
+      setMyFiles((prev) =>
+        prev.map((f) =>
+          f._id === fileId
+            ? {
+                ...f,
+                status: "submitted",
+                ...payload,
+                submittedAt: new Date(),
+              }
+            : f
+        )
+      );
 
-    try {
-      await api.post(`/api/audio/${fileId}/submit`, payload, { timeout: 15000 });
-      setSuccess("Submitted!");
-      cacheManager.invalidate("myFiles");
-    } catch (e) {
-      setMyFiles(originalFiles);
-      setError(e?.response?.data?.message || "Submission failed");
-    } finally {
-      setSubmitting(null);
-    }
-  }, [myFiles]);
+      setSubmitting(fileId);
+      setError("");
+
+      try {
+        await api.post(`/api/audio/${fileId}/submit`, payload, { timeout: 15000 });
+        setSuccess("Submitted");
+        cacheManager.invalidate("myFiles");
+      } catch (e) {
+        setMyFiles(originalFiles);
+        setError(e?.response?.data?.message || "Submission failed");
+      } finally {
+        setSubmitting(null);
+      }
+    },
+    [myFiles]
+  );
 
   // ─────────────────────────────────────────────────────────────
   // ADMIN ACTIONS
   // ─────────────────────────────────────────────────────────────
 
-  const handleVerdict = useCallback(async (fileId, verdict, adminNote = "") => {
-    const originalFiles = adminFiles;
+  const handleVerdict = useCallback(
+    async (fileId, verdict, adminNote = "", extra = null) => {
+      const originalFiles = adminFiles;
 
-    setAdminFiles((prev) => prev.filter((f) => f._id !== fileId));
-    setVerdicting(fileId);
-    setError("");
+      setAdminFiles((prev) => prev.filter((f) => f._id !== fileId));
+      setVerdicting(fileId);
+      setError("");
 
-    setStats((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        submitted: Math.max(0, prev.submitted - 1),
-        [verdict]: prev[verdict] + 1,
-      };
-    });
+      try {
+        await api.patch(
+          `/api/audio/${fileId}/verify`,
+          extra ? { verdict, adminNote, ...extra } : { verdict, adminNote },
+          { timeout: 20000 }
+        );
 
-    try {
-      await api.patch(`/api/audio/${fileId}/verify`, { verdict, adminNote }, { timeout: 15000 });
-      setSuccess(`File ${verdict}!`);
-      cacheManager.invalidate("admin_");
-      cacheManager.invalidate("stats");
-    } catch (e) {
-      setAdminFiles(originalFiles);
-      setStats((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          submitted: prev.submitted + 1,
-          [verdict]: Math.max(0, prev[verdict] - 1),
-        };
-      });
-      setError(e?.response?.data?.message || "Verdict failed");
-    } finally {
-      setVerdicting(null);
-    }
-  }, [adminFiles]);
+        setSuccess(verdict === "verified" ? "Verified" : "Rejected");
+        cacheManager.invalidate("admin_");
+        cacheManager.invalidate("stats");
+
+        await loadStats();
+      } catch (e) {
+        setAdminFiles(originalFiles);
+        setError(e?.response?.data?.message || "Verdict failed");
+      } finally {
+        setVerdicting(null);
+      }
+    },
+    [adminFiles, loadStats]
+  );
 
   const handleExport = useCallback(async (format) => {
     try {
@@ -726,37 +864,39 @@ export default function DataValidationPage() {
         responseType: "blob",
         timeout: 30000,
       });
+
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
       a.download = `tts_dataset.${format}`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e) {
+    } catch {
       setError("Export failed");
     }
   }, []);
 
   // ─────────────────────────────────────────────────────────────
-  // MEMOIZED VALUES
+  // MEMO
   // ─────────────────────────────────────────────────────────────
 
   const adminTotalPages = useMemo(() => Math.max(1, Math.ceil(adminTotal / LIMIT)), [adminTotal]);
   const inProgressFiles = useMemo(() => myFiles.filter((f) => f.status === "assigned"), [myFiles]);
   const submittedFiles = useMemo(() => myFiles.filter((f) => f.status === "submitted"), [myFiles]);
 
-  if (!user) return <div className="dv-loading">Loading…</div>;
+  if (!user) return <div className="dv-loading">Loading...</div>;
 
   return (
     <div className="dv">
       {error && (
         <div className="dv-alert dv-alert-error" onClick={() => setError("")}>
-          {error} <span className="dv-alert-close">×</span>
+          {error} <span className="dv-alert-close">x</span>
         </div>
       )}
+
       {success && (
         <div className="dv-alert dv-alert-success" onClick={() => setSuccess("")}>
-          {success} <span className="dv-alert-close">×</span>
+          {success} <span className="dv-alert-close">x</span>
         </div>
       )}
 
@@ -766,7 +906,7 @@ export default function DataValidationPage() {
           <div className="dv-page-header">
             <div>
               <h2 className="dv-title">Data Validation</h2>
-              <p className="dv-sub">Listen · compare · accept/reject</p>
+              <p className="dv-sub">Listen, compare, accept or reject</p>
             </div>
           </div>
 
@@ -802,16 +942,17 @@ export default function DataValidationPage() {
                 </button>
               ))}
             </div>
+
             <input
               className="dv-search"
-              placeholder="Search…"
+              placeholder="Search..."
               value={adminSearch}
               onChange={(e) => handleAdminSearch(e.target.value)}
             />
           </div>
 
           {loading ? (
-            <div className="dv-loading">Loading…</div>
+            <div className="dv-loading">Loading...</div>
           ) : adminFiles.length === 0 ? (
             <div className="dv-empty">No files found.</div>
           ) : adminStatus === "submitted" ? (
@@ -834,7 +975,7 @@ export default function DataValidationPage() {
                     <th>File</th>
                     <th>Folder</th>
                     <th>Student</th>
-                    <th>Raw Text</th>
+                    <th>Raw</th>
                     <th>Normalized</th>
                     <th>Audio</th>
                   </tr>
@@ -852,7 +993,9 @@ export default function DataValidationPage() {
                       <td className="dv-cell-text-full">
                         <DiffHighlight original={f.normalizedText || ""} modified={f.studentNormalizedText || ""} />
                       </td>
-                      <td><AudioPlayer fileId={f._id} /></td>
+                      <td>
+                        <AudioPlayer fileId={f._id} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -868,7 +1011,11 @@ export default function DataValidationPage() {
             >
               Prev
             </button>
-            <span className="dv-page-info">Page {adminPage} / {adminTotalPages}</span>
+
+            <span className="dv-page-info">
+              Page {adminPage} / {adminTotalPages}
+            </span>
+
             <button
               className="dv-btn"
               disabled={adminPage >= adminTotalPages}
@@ -876,9 +1023,15 @@ export default function DataValidationPage() {
             >
               Next
             </button>
+
             <div style={{ flex: 1 }} />
-            <button className="dv-btn" onClick={() => handleExport("json")}>JSON</button>
-            <button className="dv-btn" onClick={() => handleExport("csv")}>CSV</button>
+
+            <button className="dv-btn" onClick={() => handleExport("json")}>
+              JSON
+            </button>
+            <button className="dv-btn" onClick={() => handleExport("csv")}>
+              CSV
+            </button>
           </div>
         </div>
       )}
@@ -889,7 +1042,7 @@ export default function DataValidationPage() {
           <div className="dv-page-header">
             <div>
               <h2 className="dv-title">Data Validation</h2>
-              <p className="dv-sub">Listen · correct · submit</p>
+              <p className="dv-sub">Listen, correct, submit</p>
             </div>
           </div>
 
@@ -925,12 +1078,7 @@ export default function DataValidationPage() {
               ) : (
                 <div>
                   {inProgressFiles.map((f) => (
-                    <FileCard
-                      key={f._id}
-                      file={f}
-                      onSubmit={handleSubmit}
-                      isSubmitting={submitting === f._id}
-                    />
+                    <FileCard key={f._id} file={f} onSubmit={handleSubmit} isSubmitting={submitting === f._id} />
                   ))}
                 </div>
               )}
@@ -950,9 +1098,11 @@ export default function DataValidationPage() {
                           <span className="dv-filename">{f.filename}</span>
                           <span className="dv-id">#{shortId(f._id)}</span>
                         </div>
-                        <span className="dv-badge-submitted">Submitted ✓</span>
+                        <span className="dv-badge-submitted">Submitted</span>
                       </div>
+
                       <AudioPlayer fileId={f._id} />
+
                       <div className="dv-submitted-texts">
                         <div className="dv-submitted-col">
                           <div className="dv-submitted-label">Raw Text</div>
@@ -960,6 +1110,7 @@ export default function DataValidationPage() {
                             <DiffHighlight original={f.rawText || ""} modified={f.studentRawText || ""} />
                           </div>
                         </div>
+
                         <div className="dv-submitted-col">
                           <div className="dv-submitted-label">Normalized Text</div>
                           <div className="dv-submitted-text">
@@ -979,41 +1130,37 @@ export default function DataValidationPage() {
               <div className="dv-toolbar">
                 <input
                   className="dv-search"
-                  placeholder="Search…"
+                  placeholder="Search..."
                   value={avSearch}
                   onChange={(e) => handleAvSearch(e.target.value)}
                 />
+
                 {selected.length > 0 && (
-                  <button
-                    className="dv-btn dv-btn-assign"
-                    onClick={handleAssign}
-                    disabled={assigning}
-                  >
-                    {assigning ? "Assigning…" : `Assign ${selected.length}`}
+                  <button className="dv-btn dv-btn-assign" onClick={handleAssign} disabled={assigning}>
+                    {assigning ? "Assigning..." : `Assign ${selected.length}`}
                   </button>
                 )}
               </div>
 
               {selected.length > 0 && (
                 <div className="dv-assign-bar">
-                  <span>{selected.length}/{MAX_PER_DAY} selected</span>
-                  <button className="dv-btn" onClick={() => setSelected([])}>Clear</button>
+                  <span>
+                    {selected.length}/{MAX_PER_DAY} selected
+                  </span>
+                  <button className="dv-btn" onClick={() => setSelected([])}>
+                    Clear
+                  </button>
                 </div>
               )}
 
               {loading ? (
-                <div className="dv-loading">Loading…</div>
+                <div className="dv-loading">Loading...</div>
               ) : available.length === 0 ? (
                 <div className="dv-empty">No available files.</div>
               ) : (
                 <div className="dv-available-list">
                   {available.map((f) => (
-                    <AvailableRow
-                      key={f._id}
-                      file={f}
-                      selected={selected.includes(f._id)}
-                      onToggle={toggleSelect}
-                    />
+                    <AvailableRow key={f._id} file={f} selected={selected.includes(f._id)} onToggle={toggleSelect} />
                   ))}
                 </div>
               )}

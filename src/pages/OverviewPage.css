@@ -345,3 +345,62 @@
 .ov-row-paid td {
   background: #fafffe;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   HOURS TOGGLE BUTTON (NEW)
+───────────────────────────────────────────────────────────── */
+
+.ov-card-head-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ov-hours-toggle {
+  display: flex;
+  gap: 6px;
+  background: #f3f4f6;
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.ov-toggle-btn {
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.ov-toggle-btn:hover {
+  background: #f9fafb;
+  color: #374151;
+}
+
+.ov-toggle-btn.ov-toggle-active {
+  background: #fff;
+  color: #111827;
+  font-weight: 600;
+  border-color: #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Responsive: stack on mobile */
+@media (max-width: 720px) {
+  .ov-card-head-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ov-hours-toggle {
+    align-self: flex-start;
+  }
+}

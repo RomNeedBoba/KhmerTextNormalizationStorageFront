@@ -1,0 +1,297 @@
+.val {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.val-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+}
+
+.val-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: #1a1a1a;
+}
+
+.val-sub {
+  font-size: 0.95rem;
+  color: #666;
+  margin: 0;
+}
+
+.val-btn {
+  padding: 0.75rem 1.5rem;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.val-btn:hover {
+  background: #0056b3;
+}
+
+.val-loading {
+  padding: 3rem;
+  text-align: center;
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.val-alert-error {
+  padding: 1rem;
+  background: #fee;
+  border: 1px solid #fcc;
+  border-radius: 6px;
+  color: #c33;
+  margin-bottom: 1rem;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.val-alert-error:hover {
+  opacity: 0.8;
+}
+
+/* ── Stats Grid ── */
+
+.val-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.val-stat {
+  padding: 1.5rem;
+  background: white;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.val-stat-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+
+.val-stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+}
+
+.val-stat-sub {
+  font-size: 0.8rem;
+  color: #999;
+}
+
+/* ── Card ── */
+
+.val-card {
+  background: white;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.val-card-head {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e5e5;
+  background: #fafafa;
+}
+
+.val-card-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 0.5rem 0;
+}
+
+.val-card-sub {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 0;
+}
+
+/* ── Sort Controls ── */
+
+.val-sort-controls {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e5e5e5;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.val-sort-btn {
+  padding: 0.5rem 1rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.val-sort-btn:hover {
+  border-color: #007bff;
+  color: #007bff;
+}
+
+.val-sort-active {
+  background: #007bff;
+  border-color: #007bff;
+  color: white;
+}
+
+/* ── Table ── */
+
+.val-table-wrap {
+  overflow-x: auto;
+}
+
+.val-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.val-table thead {
+  background: #fafafa;
+  border-bottom: 2px solid #e5e5e5;
+}
+
+.val-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+}
+
+.val-table tbody tr {
+  border-bottom: 1px solid #e5e5e5;
+  transition: background 0.15s;
+}
+
+.val-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.val-table td {
+  padding: 1rem;
+  color: #333;
+}
+
+.val-td-rank {
+  font-weight: 600;
+  color: #999;
+  width: 40px;
+}
+
+.val-td-email {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.val-td-name {
+  font-weight: 500;
+}
+
+.val-td-approved,
+.val-td-rejected {
+  text-align: center;
+}
+
+.val-td-total {
+  text-align: center;
+  font-weight: 600;
+  color: #007bff;
+}
+
+.val-td-rate {
+  width: 120px;
+}
+
+.val-td-date {
+  font-size: 0.85rem;
+  color: #999;
+  white-space: nowrap;
+}
+
+.val-empty {
+  text-align: center;
+  padding: 2rem !important;
+  color: #999;
+}
+
+/* ── Badges ── */
+
+.val-badge {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.val-badge-approved {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.val-badge-rejected {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* ── Rate Bar ── */
+
+.val-rate-bar {
+  position: relative;
+  height: 24px;
+  background: #f0f0f0;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.val-rate-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #4caf50, #81c784);
+  border-radius: 12px;
+  transition: width 0.3s;
+}
+
+.val-rate-text {
+  position: relative;
+  z-index: 1;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #333;
+}
