@@ -619,13 +619,8 @@ export default function DataValidationPage() {
 
   const loadAvailable = useCallback(async (q = "") => {
     try {
-      const cacheKey = `available_${q}`;
-      const cached = cacheManager.get(cacheKey);
-      if (cached) {
-        setAvailable(cached.items);
-        setAvTotal(cached.total);
-        return;
-      }
+      // Clear cache to force fresh data with new sorting
+      cacheManager.invalidate("available_");
 
       setLoading(true);
       const res = await api.get("/api/audio/available", {
@@ -634,7 +629,7 @@ export default function DataValidationPage() {
       });
 
       const data = { items: res.data.items || [], total: res.data.total || 0 };
-      cacheManager.set(cacheKey, data);
+      cacheManager.set(`available_${q}`, data);
 
       setAvailable(data.items);
       setAvTotal(data.total);
@@ -700,6 +695,8 @@ export default function DataValidationPage() {
       loadAdminFiles(1, "submitted", "");
       loadStats();
     } else {
+      cacheManager.invalidate("available_");
+      cacheManager.invalidate("myFiles");
       loadMyFiles();
       loadAvailable("");
     }
@@ -742,7 +739,7 @@ export default function DataValidationPage() {
     [loadAdminFiles, adminSearch]
   );
 
-  // ─────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────��─────────────────────
   // STUDENT ACTIONS
   // ─────────────────────────────────────────────────────────────
 
