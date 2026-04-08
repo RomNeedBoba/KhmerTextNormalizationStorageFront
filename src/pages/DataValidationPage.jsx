@@ -40,7 +40,7 @@ class AudioLoadQueue {
 
 const audioLoadQueue = new AudioLoadQueue(3);
 
-// ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────���───────────────────────
 // CACHE LAYER (revokes blob URLs when expiring / clearing)
 // ─────────────────────────────────────────────────────────────────
 
@@ -642,14 +642,8 @@ export default function DataValidationPage() {
 
   const loadAdminFiles = useCallback(async (page = 1, status = "submitted", q = "") => {
     try {
-      const cacheKey = `admin_${page}_${status}_${q}`;
-      const cached = cacheManager.get(cacheKey);
-      if (cached) {
-        setAdminFiles(cached.items);
-        setAdminTotal(cached.total);
-        setAdminPage(page);
-        return;
-      }
+      // Clear cache to force fresh data with new sorting (shortest first)
+      cacheManager.invalidate("admin_");
 
       setLoading(true);
       const res = await api.get("/api/audio", {
@@ -658,7 +652,7 @@ export default function DataValidationPage() {
       });
 
       const data = { items: res.data.items || [], total: res.data.total || 0 };
-      cacheManager.set(cacheKey, data);
+      cacheManager.set(`admin_${page}_${status}_${q}`, data);
 
       setAdminFiles(data.items);
       setAdminTotal(data.total);
@@ -692,6 +686,7 @@ export default function DataValidationPage() {
 
   useEffect(() => {
     if (isAdmin) {
+      cacheManager.invalidate("admin_");
       loadAdminFiles(1, "submitted", "");
       loadStats();
     } else {
@@ -739,7 +734,7 @@ export default function DataValidationPage() {
     [loadAdminFiles, adminSearch]
   );
 
-  // ───────────────────────────────────────��─────────────────────
+  // ─────────────────────────────────────────────────────────────
   // STUDENT ACTIONS
   // ─────────────────────────────────────────────────────────────
 
@@ -875,7 +870,7 @@ export default function DataValidationPage() {
 
   // ─────────────────────────────────────────────────────────────
   // MEMO
-  // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────���───────────
 
   const adminTotalPages = useMemo(() => Math.max(1, Math.ceil(adminTotal / LIMIT)), [adminTotal]);
   const inProgressFiles = useMemo(() => myFiles.filter((f) => f.status === "assigned"), [myFiles]);
