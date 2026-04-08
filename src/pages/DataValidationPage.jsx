@@ -15,7 +15,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // ─────────────────────────────────────────────────────────────────
 // AUDIO LOADING QUEUE (Prevent concurrent request overload)
-// ─────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────��────────
 
 class AudioLoadQueue {
   constructor(maxConcurrent = 3) {
@@ -40,7 +40,7 @@ class AudioLoadQueue {
 
 const audioLoadQueue = new AudioLoadQueue(3);
 
-// ─────────────────────────────────────────���───────────────────────
+// ─────────────────────────────────────────────────────────────────
 // CACHE LAYER (revokes blob URLs when expiring / clearing)
 // ─────────────────────────────────────────────────────────────────
 
@@ -697,7 +697,7 @@ export default function DataValidationPage() {
     }
   }, [isAdmin, loadAdminFiles, loadStats, loadMyFiles, loadAvailable]);
 
-  // ─────────────────────────────────────────────────────────────
+  // ────────────��────────────────────────────────────────────────
   // SEARCH (Debounced)
   // ─────────────────────────────────────────────────────────────
 
@@ -868,9 +868,9 @@ export default function DataValidationPage() {
     }
   }, []);
 
-  // ─────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────���────────────────
   // MEMO
-  // ─────────────────────────────────────────────────���───────────
+  // ─────────────────────────────────────────────────────────────
 
   const adminTotalPages = useMemo(() => Math.max(1, Math.ceil(adminTotal / LIMIT)), [adminTotal]);
   const inProgressFiles = useMemo(() => myFiles.filter((f) => f.status === "assigned"), [myFiles]);
