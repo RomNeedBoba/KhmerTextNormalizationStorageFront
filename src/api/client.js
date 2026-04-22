@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getToken } from "../auth/token";
 
-const API_BASE_URL = "https://backend.khtts.me";
+const API_BASE_URL = "https://api.khtts.me";
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
